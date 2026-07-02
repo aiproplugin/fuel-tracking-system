@@ -1,0 +1,26 @@
+# Dependencies
+/node_modules
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Testing
+/coverage
+
+# Misc
+*.pem
+*.log
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts

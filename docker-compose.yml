@@ -1,0 +1,25 @@
+# Local development database only. Production deployment (native PostgreSQL 16
+# on Windows Server vs Docker) is decided and documented in Phase 7.
+services:
+  postgres:
+    image: postgres:16
+    container_name: fuel-tracking-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fuel_tracking
+      POSTGRES_USER: fuel_app
+      # Dev-only default; override via a POSTGRES_PASSWORD entry in .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fuel_dev_only_password}
+    ports:
+      # Bind to loopback only — never expose the dev DB on the network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - fuel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuel_app -d fuel_tracking"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  fuel_pgdata:

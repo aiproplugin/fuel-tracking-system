@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Prototype uses #E2E8F0 as the universal border color. */
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+  }
+}
