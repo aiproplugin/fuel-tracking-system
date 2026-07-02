@@ -57,14 +57,37 @@ Verify it is healthy:
 docker compose ps
 ```
 
-### 4. Run the app
+### 4. Create the database schema and seed data
+
+```powershell
+npm run db:migrate   # applies Prisma migrations (prisma migrate dev)
+npm run db:seed      # sites, tanks (ledger-backed stock), users, vehicles, QR tokens
+```
+
+### 5. Run the app
 
 ```powershell
 npm run dev
 ```
 
-Open <http://localhost:3000> — you are redirected to the login screen
-(authentication activates in Phase 1).
+Open <http://localhost:3000> and sign in with a seeded account.
+
+#### Seeded development accounts (DEV ONLY — never reuse in production)
+
+| Username     | Password              | Role       | Scope                       |
+| ------------ | --------------------- | ---------- | --------------------------- |
+| `admin`      | `Admin#Fuel2026`      | ADMIN      | Everything                  |
+| `manager`    | `Manager#Fuel2026`    | MANAGER    | All sites (read/report)     |
+| `supervisor` | `Supervisor#Fuel2026` | SUPERVISOR | Main Depot                  |
+| `operator1`  | `Operator1#Fuel2026`  | OPERATOR   | Tank A (Diesel), Main Depot |
+| `operator2`  | `Operator2#Fuel2026`  | OPERATOR   | Tank B (Petrol), Main Depot |
+
+Five consecutive wrong passwords lock an account for 15 minutes (exponential
+backoff after that). To unlock immediately in dev:
+
+```powershell
+docker exec fuel-tracking-postgres psql -U fuel_app -d fuel_tracking -c "UPDATE app_user SET failed_login_count = 0, locked_until = NULL WHERE username = 'operator1';"
+```
 
 ### 5. Tests, lint, types
 

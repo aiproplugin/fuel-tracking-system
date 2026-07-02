@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { auth } from "@/server/auth";
 
 /**
- * Root route. Phase 1 adds session-aware routing (operator home vs admin
- * dashboard); until then everything lands on the login screen.
+ * Root route: session-aware entry point. Phase 2 replaces /home with the
+ * role-specific screens (operator home vs admin dashboard).
  */
-export default function RootPage() {
-  redirect("/login");
+export default async function RootPage() {
+  const session = await auth();
+  redirect(session?.user ? "/home" : "/login");
 }

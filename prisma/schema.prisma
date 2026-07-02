@@ -1,7 +1,13 @@
-// Fuel Usage & Stock Tracking System — Prisma schema.
-// Phase 0: datasource + generator only. The full data model (users, roles,
-// tanks, vehicles, stock_movement ledger, qr_token, audit_log, settings)
-// is introduced in Phase 1.
+// Fuel Usage & Stock Tracking System — complete data model (Phase 1).
+//
+// Conventions:
+// - Table/column names are snake_case via @@map/@map; TS side is camelCase.
+// - All timestamps are timestamptz and stored in UTC (rendered Asia/Colombo in UI).
+// - Fuel quantities are Decimal(12,2) liters; odometers are integer kilometers.
+// - stock_movement is the SACRED append-only ledger: BigInt autoincrement id
+//   gives strict insertion order; every quantity change stores balance_after.
+//   tank.current_stock is only a cache of the latest movement's balance_after.
+// - unit_cost columns exist but are hidden in UI (v1 out of scope).
 
 generator client {
   provider = "prisma-client-js"
@@ -10,4 +16,347 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OPERATOR
+  SUPERVISOR
+  MANAGER
+  ADMIN
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+}
+
+enum MovementType {
+  ISSUE
+  DELIVERY
+  ADJUSTMENT
+}
+
+enum ExceptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGIN_RATE_LIMITED
+  ACCOUNT_LOCKED
+  LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  ROLE_CHANGED
+  TANK_ASSIGNED
+  ODOMETER_OVERRIDE
+  ODOMETER_EXCEPTION_FLAGGED
+  ODOMETER_EXCEPTION_REVIEWED
+  FUEL_ISSUED
+  DELIVERY_RECORDED
+  ADJUSTMENT_RECORDED
+  QR_TOKEN_CREATED
+  QR_TOKEN_ROTATED
+  QR_TOKEN_DEACTIVATED
+  SETTINGS_CHANGED
+}
+
+// ---------------------------------------------------------------------------
+// Organization & people
+// ---------------------------------------------------------------------------
+
+model Site {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tanks Tank[]
+  users User[]
+
+  @@map("site")
+}
+
+// Mapped to app_user ("user" is reserved in raw SQL sessions).
+model User {
+  id               String    @id @default(uuid())
+  username         String    @unique // stored lowercase; normalized at login
+  passwordHash     String    @map("password_hash")
+  displayName      String    @map("display_name")
+  role             Role
+  isActive         Boolean   @default(true) @map("is_active")
+  defaultTankId    String?   @map("default_tank_id")
+  siteId           String?   @map("site_id")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  defaultTank Tank? @relation("OperatorDefaultTank", fields: [defaultTankId], references: [id])
+  site        Site? @relation(fields: [siteId], references: [id])
+
+  fuelTransactions   FuelTransaction[]   @relation("TransactionOperator")
+  odometerOverrides  FuelTransaction[]   @relation("TransactionOverrideAdmin")
+  deliveries         Delivery[]
+  adjustments        StockAdjustment[]
+  stockMovements     StockMovement[]
+  auditLogs          AuditLog[]
+  flaggedExceptions  OdometerException[] @relation("ExceptionOperator")
+  reviewedExceptions OdometerException[] @relation("ExceptionReviewer")
+
+  @@map("app_user")
+}
+
+// Optional and fully modeled; driver reports stay hidden until enabled.
+model Driver {
+  id         String   @id @default(uuid())
+  name       String
+  employeeNo String?  @unique @map("employee_no")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  fuelTransactions FuelTransaction[]
+
+  @@map("driver")
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
+model Tank {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  siteId            String   @map("site_id")
+  fuelType          FuelType @map("fuel_type")
+  capacityLiters    Decimal  @map("capacity_liters") @db.Decimal(12, 2)
+  // Cache of the latest stock_movement.balance_after — never authoritative.
+  currentStock      Decimal  @default(0) @map("current_stock") @db.Decimal(12, 2)
+  lowStockThreshold Decimal  @map("low_stock_threshold") @db.Decimal(12, 2)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  site Site @relation(fields: [siteId], references: [id])
+
+  operators        User[]              @relation("OperatorDefaultTank")
+  movements        StockMovement[]
+  fuelTransactions FuelTransaction[]
+  deliveries       Delivery[]
+  adjustments      StockAdjustment[]
+  exceptions       OdometerException[]
+
+  @@map("tank")
+}
+
+// Per-vehicle-type km/L bounds = the abnormal-consumption band (Settings screen).
+model VehicleType {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  minKmPerLiter Decimal  @map("min_km_per_liter") @db.Decimal(6, 2)
+  maxKmPerLiter Decimal  @map("max_km_per_liter") @db.Decimal(6, 2)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vehicles Vehicle[]
+
+  @@map("vehicle_type")
+}
+
+model Vehicle {
+  id              String   @id @default(uuid())
+  plateNumber     String   @unique @map("plate_number")
+  vehicleTypeId   String   @map("vehicle_type_id")
+  fuelType        FuelType @map("fuel_type")
+  // Cache of the highest accepted odometer (source of truth: fuel_transaction).
+  currentOdometer Int      @default(0) @map("current_odometer")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  vehicleType VehicleType @relation(fields: [vehicleTypeId], references: [id])
+
+  qrTokens         QrToken[]
+  fuelTransactions FuelTransaction[]
+  exceptions       OdometerException[]
+
+  @@map("vehicle")
+}
+
+// Opaque lookup tokens — NEVER the plate, NEVER a column on vehicle.
+// Rotation = deactivate old row + insert new row; vehicle history untouched.
+model QrToken {
+  id            String    @id @default(uuid())
+  token         String    @unique
+  vehicleId     String    @map("vehicle_id")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(3)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+  @@map("qr_token")
+}
+
+// ---------------------------------------------------------------------------
+// Fuel activity (headers) + the ledger
+// ---------------------------------------------------------------------------
+
+model FuelTransaction {
+  id               String   @id @default(uuid())
+  // Client-generated; dedupes retries/double-taps (unique = the guarantee).
+  idempotencyKey   String   @unique @map("idempotency_key")
+  vehicleId        String   @map("vehicle_id")
+  tankId           String   @map("tank_id")
+  operatorId       String   @map("operator_id")
+  driverId         String?  @map("driver_id")
+  liters           Decimal  @db.Decimal(10, 2)
+  odometer         Int
+  previousOdometer Int      @map("previous_odometer")
+  odometerOverride Boolean  @default(false) @map("odometer_override")
+  overrideReason   String?  @map("override_reason")
+  overrideByUserId String?  @map("override_by_user_id")
+  // Efficiency of the PREVIOUS fill: (odometer - previous) / liters at previous fill.
+  // Null on first fill (no baseline) — expected, not an error.
+  kmPerLiter       Decimal? @map("km_per_liter") @db.Decimal(6, 2)
+  isAbnormal       Boolean  @default(false) @map("is_abnormal")
+  unitCost         Decimal? @map("unit_cost") @db.Decimal(10, 2)
+  issuedAt         DateTime @map("issued_at") @db.Timestamptz(3) // may be backdated
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id])
+  tank       Tank    @relation(fields: [tankId], references: [id])
+  operator   User    @relation("TransactionOperator", fields: [operatorId], references: [id])
+  driver     Driver? @relation(fields: [driverId], references: [id])
+  overrideBy User?   @relation("TransactionOverrideAdmin", fields: [overrideByUserId], references: [id])
+
+  movement StockMovement?
+
+  @@index([vehicleId, issuedAt])
+  @@index([tankId, issuedAt])
+  @@map("fuel_transaction")
+}
+
+model Delivery {
+  id           String   @id @default(uuid())
+  tankId       String   @map("tank_id")
+  receivedById String   @map("received_by_id")
+  liters       Decimal  @db.Decimal(12, 2)
+  supplierName String?  @map("supplier_name")
+  referenceNo  String?  @map("reference_no")
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(10, 2)
+  deliveredAt  DateTime @map("delivered_at") @db.Timestamptz(3) // may be backdated
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tank       Tank @relation(fields: [tankId], references: [id])
+  receivedBy User @relation(fields: [receivedById], references: [id])
+
+  movement StockMovement?
+
+  @@index([tankId, deliveredAt])
+  @@map("delivery")
+}
+
+model StockAdjustment {
+  id             String   @id @default(uuid())
+  tankId         String   @map("tank_id")
+  adjustedById   String   @map("adjusted_by_id")
+  // Signed liters: negative = shrinkage/correction down, positive = correction up.
+  quantityChange Decimal  @map("quantity_change") @db.Decimal(12, 2)
+  reason         String
+  adjustedAt     DateTime @map("adjusted_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tank       Tank @relation(fields: [tankId], references: [id])
+  adjustedBy User @relation(fields: [adjustedById], references: [id])
+
+  movement StockMovement?
+
+  @@index([tankId, adjustedAt])
+  @@map("stock_adjustment")
+}
+
+// THE LEDGER. Append-only; never updated, never deleted.
+// BigInt autoincrement id = strict insertion order even with backdated
+// issued_at/delivered_at timestamps on the source records.
+model StockMovement {
+  id                BigInt       @id @default(autoincrement())
+  tankId            String       @map("tank_id")
+  type              MovementType
+  // Signed liters: ISSUE negative, DELIVERY positive, ADJUSTMENT either.
+  quantity          Decimal      @db.Decimal(12, 2)
+  balanceAfter      Decimal      @map("balance_after") @db.Decimal(12, 2)
+  fuelTransactionId String?      @unique @map("fuel_transaction_id")
+  deliveryId        String?      @unique @map("delivery_id")
+  adjustmentId      String?      @unique @map("adjustment_id")
+  createdById       String       @map("created_by_id")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tank            Tank             @relation(fields: [tankId], references: [id])
+  fuelTransaction FuelTransaction? @relation(fields: [fuelTransactionId], references: [id])
+  delivery        Delivery?        @relation(fields: [deliveryId], references: [id])
+  adjustment      StockAdjustment? @relation(fields: [adjustmentId], references: [id])
+  createdBy       User             @relation(fields: [createdById], references: [id])
+
+  @@index([tankId, id])
+  @@map("stock_movement")
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions & audit
+// ---------------------------------------------------------------------------
+
+// Operator "flag for admin review" when an odometer entry is blocked (M6/D6).
+model OdometerException {
+  id                String          @id @default(uuid())
+  vehicleId         String          @map("vehicle_id")
+  tankId            String          @map("tank_id")
+  operatorId        String          @map("operator_id")
+  previousOdometer  Int             @map("previous_odometer")
+  attemptedOdometer Int             @map("attempted_odometer")
+  status            ExceptionStatus @default(PENDING)
+  correctedOdometer Int?            @map("corrected_odometer")
+  reviewReason      String?         @map("review_reason")
+  reviewedById      String?         @map("reviewed_by_id")
+  reviewedAt        DateTime?       @map("reviewed_at") @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id])
+  tank       Tank    @relation(fields: [tankId], references: [id])
+  operator   User    @relation("ExceptionOperator", fields: [operatorId], references: [id])
+  reviewedBy User?   @relation("ExceptionReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status, createdAt])
+  @@map("odometer_exception")
+}
+
+// Append-only. actor_id is null for failed logins against unknown usernames
+// (the attempted username is deliberately NOT stored — it may be a password
+// typed into the wrong field).
+model AuditLog {
+  id         BigInt      @id @default(autoincrement())
+  actorId    String?     @map("actor_id")
+  action     AuditAction
+  entityType String?     @map("entity_type")
+  entityId   String?     @map("entity_id")
+  before     Json?
+  after      Json?
+  ipAddress  String?     @map("ip_address")
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_log")
 }
