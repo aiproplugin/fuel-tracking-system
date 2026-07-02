@@ -52,6 +52,9 @@ enum AuditAction {
   LOGIN_RATE_LIMITED
   ACCOUNT_LOCKED
   LOGOUT
+  PASSWORD_SET
+  PASSWORD_RESET
+  PASSWORD_CHANGED
   USER_CREATED
   USER_UPDATED
   ROLE_CHANGED
@@ -66,6 +69,11 @@ enum AuditAction {
   QR_TOKEN_ROTATED
   QR_TOKEN_DEACTIVATED
   SETTINGS_CHANGED
+  SITE_CREATED
+  TANK_CREATED
+  TANK_UPDATED
+  VEHICLE_CREATED
+  VEHICLE_UPDATED
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +100,9 @@ model User {
   displayName      String    @map("display_name")
   role             Role
   isActive         Boolean   @default(true) @map("is_active")
+  // True after an admin sets/resets the password; the user is forced to
+  // choose their own password at next sign-in before using the app.
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   defaultTankId    String?   @map("default_tank_id")
   siteId           String?   @map("site_id")
   failedLoginCount Int       @default(0) @map("failed_login_count")

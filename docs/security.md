@@ -56,6 +56,47 @@
   seeded dev passwords satisfy the strong policy and are documented as
   dev-only.
 
+## Implemented in Phase 2
+
+- **Role matrix enforced server-side** on every master-data procedure:
+  vehicles/tanks read = SUPERVISOR+ (supervisor scoped to own site via
+  `siteScopeWhere` — a supervisor without a site sees nothing, never
+  everything); all writes + users/QR tokens/settings = ADMIN only; audit
+  read = MANAGER/ADMIN. Sidebar visibility mirrors, but never replaces,
+  the tRPC gates.
+- **Audit coverage extended**: USER_CREATED/UPDATED, ROLE_CHANGED,
+  TANK_ASSIGNED (before/after tank), TANK/VEHICLE/SITE create+update,
+  SETTINGS_CHANGED (km/L band before/after), QR_TOKEN created/rotated/
+  deactivated. Password hashes and plaintext never enter audit payloads
+  (covered by test).
+- **Operational safety rails**: the last active ADMIN cannot be demoted or
+  deactivated; tank fuel type is immutable after creation; vehicle odometers
+  are not editable through CRUD (only fuel issues / exception review);
+  operators changing role lose their tank binding.
+- **QR tokens**: opaque `FT-<uuid>` in their own table, at most one active
+  per vehicle, rotation atomically deactivates the old sheet; the printed
+  sheet contains only the token QR + plate text.
+
+## Password management (post-Phase 2 addition)
+
+- **Model: admin sets a TEMPORARY password; the user must replace it at
+  first sign-in.** The admin never knows a user's long-term credential.
+  Applies to both user creation and the ADMIN "Reset password" action.
+- **Server-side enforcement**: a session carrying `mustChangePassword` is
+  blocked by `protectedProcedure` (FORBIDDEN) on every procedure except
+  `auth.changePassword`; the `/change-password` redirect is UX only.
+- **Own-password change**: requires the current password, enforces the
+  policy schema, rejects reuse of the current password, rate-limited
+  (5 attempts / 15 min per user), then forces re-login for a clean session.
+- **Audit**: `PASSWORD_SET` (initial, temporary), `PASSWORD_RESET`
+  (admin reset), `PASSWORD_CHANGED` (user's own change). Passwords and
+  hashes never appear in audit payloads, logs, or API responses (covered
+  by tests).
+- **JWT-session caveat**: resetting a password does NOT terminate a target
+  user's existing session (JWT strategy has no server-side revocation);
+  it remains valid until expiry (max 8 h) or sign-out. Revisit with a
+  server-side session store in Phase 7 if instant revocation is required.
+
 ## Known gaps / roadmap
 
 | Item                                                                                                                                                                                                                                                                  | Phase |

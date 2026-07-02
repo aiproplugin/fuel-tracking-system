@@ -1,8 +1,10 @@
 import type { Role } from "@prisma/client";
+import { TRPCError } from "@trpc/server";
 import { logger } from "@/lib/logger";
 import { computeLockedUntil, isLocked } from "@/server/auth/lockout-policy";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { db } from "@/server/db";
+import { createRateLimiter } from "@/server/security/rate-limit";
 import { recordAuditEvent } from "@/server/services/audit.service";
 
 /** Shape returned to Auth.js on successful authentication. */
@@ -13,6 +15,8 @@ export interface AuthenticatedUser {
   role: Role;
   defaultTankId: string | null;
   siteId: string | null;
+  /** True while an admin-set temporary password is in force. */
+  mustChangePassword: boolean;
 }
 
 /** What the authenticated landing page needs (Phase 1 placeholder). */
@@ -142,7 +146,63 @@ export async function verifyUserCredentials(input: {
     role: user.role,
     defaultTankId: user.defaultTankId,
     siteId: user.siteId,
+    mustChangePassword: user.mustChangePassword,
   };
+}
+
+/** Guarded: 5 attempts / 15 min per user (current-password brute-force). */
+const passwordChangeRateLimiter = createRateLimiter({ limit: 5, windowMs: 15 * 60_000 });
+
+/**
+ * User changes their OWN password (also clears the admin-set temporary
+ * flag). Requires the current password; the new one must satisfy the policy
+ * (enforced by the input schema) and differ from the current one. Audited
+ * as PASSWORD_CHANGED — never the password or hash.
+ */
+export async function changeOwnPassword(input: {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  const rate = passwordChangeRateLimiter.consume(input.userId);
+  if (!rate.allowed) {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: "Too many attempts. Try again later.",
+    });
+  }
+
+  const user = await db.user.findUniqueOrThrow({ where: { id: input.userId } });
+
+  const currentMatches = await verifyPassword(user.passwordHash, input.currentPassword);
+  if (!currentMatches) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect." });
+  }
+
+  const sameAsCurrent = await verifyPassword(user.passwordHash, input.newPassword);
+  if (sameAsCurrent) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "The new password must be different from the current one.",
+    });
+  }
+
+  const passwordHash = await hashPassword(input.newPassword);
+  await db.user.update({
+    where: { id: input.userId },
+    data: {
+      passwordHash,
+      mustChangePassword: false,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    },
+  });
+  await recordAuditEvent({
+    actorId: input.userId,
+    action: "PASSWORD_CHANGED",
+    entityType: "user",
+    entityId: input.userId,
+  });
 }
 
 /**

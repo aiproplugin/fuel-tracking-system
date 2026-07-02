@@ -44,3 +44,11 @@ export const loginInputSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginInputSchema>;
+
+/** Change-own-password input: current is presence-only, new is policy-checked. */
+export const changePasswordSchema = strictObject({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordSchema,
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

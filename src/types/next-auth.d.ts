@@ -15,6 +15,7 @@ declare module "next-auth" {
       role: Role;
       defaultTankId: string | null;
       siteId: string | null;
+      mustChangePassword: boolean;
     } & DefaultSession["user"];
   }
 
@@ -24,6 +25,7 @@ declare module "next-auth" {
     role: Role;
     defaultTankId: string | null;
     siteId: string | null;
+    mustChangePassword: boolean;
   }
 }
 
@@ -35,5 +37,6 @@ declare module "next-auth/jwt" {
     role?: Role;
     defaultTankId?: string | null;
     siteId?: string | null;
+    mustChangePassword?: boolean;
   }
 }

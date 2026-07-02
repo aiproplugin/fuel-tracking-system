@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/login-form";
+import { Logo } from "@/components/brand/logo";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -14,12 +15,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-dvh flex-col justify-center px-5 py-10">
       <div className="mx-auto w-full max-w-md">
-        <div
-          aria-hidden="true"
-          className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-xl font-extrabold text-primary"
-        >
-          F
-        </div>
+        <Logo size="lg" className="shadow-panel" />
 
         <h1 className="mt-6 text-3xl font-extrabold tracking-tight">
           Fuel Usage &amp; Stock Tracking

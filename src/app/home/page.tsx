@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { Logo } from "@/components/brand/logo";
 import { Badge } from "@/components/ui/badge";
 import { createCaller } from "@/server/api/root";
 import { createTRPCContext } from "@/server/api/trpc";
@@ -21,6 +22,9 @@ export default async function HomePage() {
   if (!session?.user) {
     redirect("/login");
   }
+  if (session.user.mustChangePassword) {
+    redirect("/change-password");
+  }
 
   // Through the tRPC caller so this page exercises the same authorized
   // pipeline the client uses (UI -> tRPC -> service -> Prisma).
@@ -36,9 +40,12 @@ export default async function HomePage() {
     <main className="flex min-h-dvh flex-col justify-center px-5 py-10">
       <div className="mx-auto w-full max-w-md space-y-5">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted">Signed in</p>
-            <h1 className="text-2xl font-bold">{me.displayName}</h1>
+          <div className="flex items-center gap-3">
+            <Logo size="md" />
+            <div>
+              <p className="text-sm text-muted">Signed in</p>
+              <h1 className="text-2xl font-bold">{me.displayName}</h1>
+            </div>
           </div>
           <Badge variant="info">{me.role}</Badge>
         </div>

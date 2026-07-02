@@ -69,6 +69,19 @@ Tables (snake_case; the Prisma model is the source of truth in `prisma/schema.pr
    by explicit role allowlist (no implicit hierarchy — e.g. adjustments are
    SUPERVISOR+ADMIN but not MANAGER). Data scoping happens in services.
 
+## Admin console (Phase 2)
+
+- `src/app/admin/*` under a server-guarded layout (SUPERVISOR+); the 248px
+  dark sidebar (`SidebarNav`) filters items by role. Pages are thin server
+  components rendering client components that call tRPC hooks.
+- Master-data flow: client → router (role gate + strict Zod) → service
+  (business rules + audit) → Prisma. Supervisor site-scoping lives in
+  `src/server/services/actor.ts` and is applied inside services.
+- The brand mark renders exclusively through `src/components/brand/logo.tsx`
+  (single source of truth for `public/logo.png`).
+- QR print sheets live OUTSIDE the admin layout (`src/app/print/qr/[vehicleId]`)
+  so printed output is chrome-free; access is ADMIN-only.
+
 ## Conventions
 
 - Store timestamps in UTC; render in Asia/Colombo (UTC+5:30).

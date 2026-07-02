@@ -82,6 +82,10 @@ Open <http://localhost:3000> and sign in with a seeded account.
 | `operator1`  | `Operator1#Fuel2026`  | OPERATOR   | Tank A (Diesel), Main Depot |
 | `operator2`  | `Operator2#Fuel2026`  | OPERATOR   | Tank B (Petrol), Main Depot |
 
+Accounts created or password-reset through the admin Users page receive a
+TEMPORARY password: the user is forced to set their own at first sign-in
+(the seeded accounts above are exempt).
+
 Five consecutive wrong passwords lock an account for 15 minutes (exponential
 backoff after that). To unlock immediately in dev:
 
@@ -89,7 +93,22 @@ backoff after that). To unlock immediately in dev:
 docker exec fuel-tracking-postgres psql -U fuel_app -d fuel_tracking -c "UPDATE app_user SET failed_login_count = 0, locked_until = NULL WHERE username = 'operator1';"
 ```
 
-### 5. Tests, lint, types
+### Swapping the logo
+
+The brand mark is read from **`public/logo.png`** by exactly one component —
+[src/components/brand/logo.tsx](src/components/brand/logo.tsx) — which every
+screen (login, /home, admin sidebar, QR print sheets) renders through. To
+rebrand:
+
+1. Replace `public/logo.png` with the new file (keep the same name; any
+   near-square image works — it is letterboxed with `object-contain`, never
+   distorted). 650×650 or larger is recommended so it stays crisp at high DPI.
+2. Restart the dev server (or rebuild for production) and hard-refresh the
+   browser (Ctrl+F5) to drop the old cached image.
+
+No code changes are needed anywhere.
+
+### 6. Tests, lint, types
 
 ```powershell
 npm run test        # Vitest

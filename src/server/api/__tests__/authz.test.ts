@@ -24,7 +24,7 @@ const testRouter = createTRPCRouter({
 
 const createTestCaller = createCallerFactory(testRouter);
 
-function contextFor(role: Role | null): TRPCContext {
+function contextFor(role: Role | null, mustChangePassword = false): TRPCContext {
   return {
     session: role
       ? {
@@ -35,6 +35,7 @@ function contextFor(role: Role | null): TRPCContext {
             role,
             defaultTankId: null,
             siteId: null,
+            mustChangePassword,
           },
           expires: new Date(Date.now() + 60_000).toISOString(),
         }
@@ -78,5 +79,11 @@ describe("authorization middleware", () => {
   it("lets any authenticated role read its own session", async () => {
     const caller = createTestCaller(contextFor("OPERATOR"));
     await expect(caller.whoami()).resolves.toBe("testuser");
+  });
+
+  it("blocks sessions carrying a temporary password on protected procedures", async () => {
+    const caller = createTestCaller(contextFor("ADMIN", true));
+    await expect(caller.whoami()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.adminOnly()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

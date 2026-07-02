@@ -23,6 +23,10 @@ function asNullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function asBoolean(value: unknown): boolean {
+  return value === true;
+}
+
 const ALL_ROLES: readonly Role[] = Object.values(Role);
 
 function asRole(value: unknown): Role {
@@ -91,6 +95,7 @@ export const authConfig = {
           role: user.role,
           defaultTankId: user.defaultTankId,
           siteId: user.siteId,
+          mustChangePassword: user.mustChangePassword,
         };
       },
     }),
@@ -106,6 +111,7 @@ export const authConfig = {
         token.role = user.role;
         token.defaultTankId = user.defaultTankId;
         token.siteId = user.siteId;
+        token.mustChangePassword = user.mustChangePassword;
       }
       return token;
     },
@@ -121,6 +127,7 @@ export const authConfig = {
           role: asRole(token.role),
           defaultTankId: asNullableString(token.defaultTankId),
           siteId: asNullableString(token.siteId),
+          mustChangePassword: asBoolean(token.mustChangePassword),
         },
       };
     },

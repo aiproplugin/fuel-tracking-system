@@ -45,8 +45,12 @@ export const createCallerFactory = t.createCallerFactory;
 /** Procedure with no auth requirement (health checks, login-adjacent lookups). */
 export const publicProcedure = t.procedure;
 
-/** Procedure requiring an authenticated session. */
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+/**
+ * Procedure requiring an authenticated session but NOT a completed password
+ * change. Only for the change-password flow itself — everything else uses
+ * protectedProcedure.
+ */
+export const sessionProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
@@ -56,6 +60,21 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
       session: ctx.session,
     },
   });
+});
+
+/**
+ * Procedure requiring an authenticated session. Sessions carrying an
+ * admin-set temporary password are blocked server-side (the /change-password
+ * redirect is only UX) until the user sets their own password.
+ */
+export const protectedProcedure = sessionProcedure.use(({ ctx, next }) => {
+  if (ctx.session.user.mustChangePassword) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Password change required before continuing.",
+    });
+  }
+  return next();
 });
 
 /**
