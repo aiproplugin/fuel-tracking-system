@@ -82,6 +82,26 @@ Tables (snake_case; the Prisma model is the source of truth in `prisma/schema.pr
 - QR print sheets live OUTSIDE the admin layout (`src/app/print/qr/[vehicleId]`)
   so printed output is chrome-free; access is ADMIN-only.
 
+## Fuel entry core (Phase 3)
+
+- `fuel-issue.service.ts` owns every fuel-quantity write. One `$transaction`
+  per issue: fuel_transaction + exactly one stock_movement (signed quantity,
+  `balance_after`) + tank/vehicle cache updates. Concurrency: a guarded
+  decrement (`updateMany where currentStock >= liters`) serializes on the
+  tank row — an emptied tank yields INSUFFICIENT_STOCK, never a negative
+  ledger balance.
+- Business blocks are a typed result union (`SUCCESS | FUEL_TYPE_MISMATCH |
+ODOMETER_BLOCKED | INSUFFICIENT_STOCK`), mapped by the client state machine
+  (`scan-flow.tsx`) to the M4–M7 prototype screens. Idempotency-key replays
+  return the original receipt; a concurrent duplicate falls back through the
+  unique-key violation to the same replay path.
+- Exception path: M6 flag -> PENDING odometer_exception (carries liters) ->
+  D6 ADMIN review. APPROVE completes the issue as an audited override
+  transaction (the fuel physically left the tank when dispensed); REJECT
+  writes nothing to the ledger.
+- The tank is never an API input: operator procedures read the binding from
+  the session JWT, set at login by an ADMIN assignment.
+
 ## Conventions
 
 - Store timestamps in UTC; render in Asia/Colombo (UTC+5:30).

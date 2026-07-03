@@ -150,6 +150,9 @@ export async function getPrintData(input: { vehicleId: string }) {
     vehicleTypeName: vehicle.vehicleType.name,
     fuelType: vehicle.fuelType,
     tokenCreatedAt: activeToken.createdAt,
+    // Printed under the QR so the manual-entry fallback is usable in the
+    // field. No added exposure: the QR image encodes this same string.
+    token: activeToken.token,
     qrDataUrl,
   };
 }

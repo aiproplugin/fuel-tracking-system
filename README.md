@@ -93,6 +93,19 @@ backoff after that). To unlock immediately in dev:
 docker exec fuel-tracking-postgres psql -U fuel_app -d fuel_tracking -c "UPDATE app_user SET failed_login_count = 0, locked_until = NULL WHERE username = 'operator1';"
 ```
 
+### Trying the operator fuel flow (Phase 3)
+
+1. Sign in as `operator1` (Tank A · Diesel) → the M2 home shows the tank and
+   today's stats → **Scan vehicle QR**.
+2. On localhost the camera works in Chrome/Edge; otherwise use **manual token
+   entry** — print or copy a token from Admin → QR Tokens (the QR encodes the
+   `FT-…` string).
+3. Try the guard rails: a petrol vehicle (e.g. PG-1204) hard-blocks with the
+   red mismatch screen; an odometer lower than the last reading blocks with
+   the amber screen and "Flag for admin review"; the flagged entry then
+   appears for review under Admin → Fuel Issues (admin only can approve with
+   a corrected reading + reason).
+
 ### Swapping the logo
 
 The brand mark is read from **`public/logo.png`** by exactly one component —

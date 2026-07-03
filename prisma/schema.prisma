@@ -333,6 +333,9 @@ model OdometerException {
   vehicleId         String          @map("vehicle_id")
   tankId            String          @map("tank_id")
   operatorId        String          @map("operator_id")
+  // Liters of the blocked submission — the fuel already physically left the
+  // tank, so an APPROVED review completes the ledger record with this amount.
+  liters            Decimal         @db.Decimal(10, 2)
   previousOdometer  Int             @map("previous_odometer")
   attemptedOdometer Int             @map("attempted_odometer")
   status            ExceptionStatus @default(PENDING)

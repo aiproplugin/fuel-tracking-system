@@ -41,3 +41,15 @@ export function formatLiters(liters: number): string {
 export function formatKilometers(km: number): string {
   return `${km.toLocaleString("en-US")} km`;
 }
+
+const COLOMBO_OFFSET_MS = 5.5 * 3_600_000;
+
+/**
+ * UTC instant of midnight in Asia/Colombo for the day containing `now`.
+ * Storage stays UTC; "today" on operator screens means the Colombo day.
+ */
+export function startOfColomboDay(now: Date): Date {
+  const shifted = new Date(now.getTime() + COLOMBO_OFFSET_MS);
+  shifted.setUTCHours(0, 0, 0, 0);
+  return new Date(shifted.getTime() - COLOMBO_OFFSET_MS);
+}

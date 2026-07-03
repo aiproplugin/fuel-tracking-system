@@ -54,7 +54,13 @@ export default async function PrintQrPage({ params }: { params: { vehicleId: str
           className="mx-auto mt-6 h-64 w-64"
         />
 
-        <p className="mt-6 text-xs text-muted">
+        {/* The token string enables the manual-entry fallback when the
+            camera is unavailable; it carries the same secret as the QR. */}
+        <p className="mx-auto mt-4 w-fit rounded-xl bg-slate-50 px-3 py-1.5 font-mono text-xs text-muted">
+          {data.token}
+        </p>
+
+        <p className="mt-4 text-xs text-muted">
           Scan at the fuel point · Issued {formatDateTime(data.tokenCreatedAt)}
         </p>
         <p className="mt-1 text-xs text-muted">

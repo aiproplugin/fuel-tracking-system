@@ -1,5 +1,6 @@
 import { auditRouter } from "@/server/api/routers/audit";
 import { authRouter } from "@/server/api/routers/auth";
+import { fuelIssuesRouter } from "@/server/api/routers/fuel-issues";
 import { healthRouter } from "@/server/api/routers/health";
 import { qrTokensRouter } from "@/server/api/routers/qr-tokens";
 import { sitesRouter } from "@/server/api/routers/sites";
@@ -16,6 +17,7 @@ import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 export const appRouter = createTRPCRouter({
   health: healthRouter,
   auth: authRouter,
+  fuelIssues: fuelIssuesRouter,
   sites: sitesRouter,
   tanks: tanksRouter,
   vehicles: vehiclesRouter,

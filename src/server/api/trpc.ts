@@ -103,3 +103,5 @@ export function roleProcedure(allowedRoles: readonly Role[]) {
 export const adminProcedure = roleProcedure(["ADMIN"]);
 export const managerProcedure = roleProcedure(["MANAGER", "ADMIN"]);
 export const supervisorProcedure = roleProcedure(["SUPERVISOR", "MANAGER", "ADMIN"]);
+/** Fuel-entry flow: OPERATOR only — the role with a session-bound tank. */
+export const operatorProcedure = roleProcedure(["OPERATOR"]);

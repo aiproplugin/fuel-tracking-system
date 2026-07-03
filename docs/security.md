@@ -97,6 +97,29 @@
   it remains valid until expiry (max 8 h) or sign-out. Revisit with a
   server-side session store in Phase 7 if instant revocation is required.
 
+## Implemented in Phase 3
+
+- **Server-side re-validation of every fuel rule**: the operator UI is UX
+  only — mismatch, odometer regression, stock, liters bounds, vehicle/tank
+  activity are all enforced in the service, and the tank always comes from
+  the session (schemas reject any client-sent tank as an unknown field).
+- **Atomic ledger writes with race-safe stock guard** (no raw SQL): the
+  in-transaction guarded decrement makes concurrent submissions serialize on
+  the tank row; balances can never go negative.
+- **Idempotency**: unique client key per submission; retries and double-taps
+  replay the original receipt; cross-operator key reuse is a hard CONFLICT.
+- **Rate limits live**: token lookup 30/5 min, manual token entry 10/5 min,
+  submission 20/5 min — per operator account.
+- **Token hygiene**: scanned tokens stay in client memory (never URLs);
+  unknown/inactive tokens return a uniform not-found (no enumeration);
+  the plate appears only after a successful active-token match.
+- **Override authority**: only ADMIN can approve a corrected odometer;
+  approval is double-guarded (status + stock) inside one transaction and
+  audited as ODOMETER_OVERRIDE + ODOMETER_EXCEPTION_REVIEWED with the
+  mandatory reason.
+- **Audit**: FUEL_ISSUED on every recorded issue;
+  ODOMETER_EXCEPTION_FLAGGED on operator flags.
+
 ## Known gaps / roadmap
 
 | Item                                                                                                                                                                                                                                                                  | Phase |
