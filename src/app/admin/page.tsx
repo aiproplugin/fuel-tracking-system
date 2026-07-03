@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { PageHeader } from "@/components/admin/page-header";
+import { ReconciliationPanel } from "@/components/admin/reconciliation-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { formatLiters } from "@/lib/format";
@@ -18,7 +19,10 @@ export default async function AdminDashboardPage() {
   const caller = createCaller(
     await createTRPCContext({ headers: new Headers(Array.from(headers().entries())) }),
   );
-  const summary = await caller.tanks.stockSummary();
+  const [summary, reconciliation] = await Promise.all([
+    caller.tanks.stockSummary(),
+    caller.reconciliation.run(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -35,16 +39,23 @@ export default async function AdminDashboardPage() {
         <KpiCard label="Active tanks" value={String(summary.tankCount)} />
       </div>
 
-      <Card>
-        <CardContent>
-          <p className="font-bold">More arriving with their data</p>
-          <p className="mt-2 text-sm text-muted">
-            Daily-liters chart, exception queue, recent ledger transactions, and reconciliation
-            status appear here as Phases 3–5 land. Stock figures above are live — cached from the
-            append-only stock ledger.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_1fr]">
+        <Card>
+          <CardContent>
+            <p className="font-bold">Charts arriving with their data</p>
+            <p className="mt-2 text-sm text-muted">
+              Daily-liters chart, exception queue, and recent ledger transactions land in Phase 5.
+              Stock figures above and the reconciliation panel are live against the append-only
+              ledger.
+            </p>
+          </CardContent>
+        </Card>
+        <ReconciliationPanel
+          tanks={reconciliation.tanks}
+          matchedCount={reconciliation.matchedCount}
+          totalCount={reconciliation.totalCount}
+        />
+      </div>
     </div>
   );
 }

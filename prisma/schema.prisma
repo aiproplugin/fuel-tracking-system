@@ -260,6 +260,9 @@ model FuelTransaction {
 
 model Delivery {
   id           String   @id @default(uuid())
+  // Client-minted per form open; dedupes double-submits (nullable: seed and
+  // pre-Phase-4 rows have none).
+  idempotencyKey String? @unique @map("idempotency_key")
   tankId       String   @map("tank_id")
   receivedById String   @map("received_by_id")
   liters       Decimal  @db.Decimal(12, 2)
@@ -280,6 +283,7 @@ model Delivery {
 
 model StockAdjustment {
   id             String   @id @default(uuid())
+  idempotencyKey String?  @unique @map("idempotency_key")
   tankId         String   @map("tank_id")
   adjustedById   String   @map("adjusted_by_id")
   // Signed liters: negative = shrinkage/correction down, positive = correction up.

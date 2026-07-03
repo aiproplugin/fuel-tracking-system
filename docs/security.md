@@ -120,6 +120,35 @@
 - **Audit**: FUEL_ISSUED on every recorded issue;
   ODOMETER_EXCEPTION_FLAGGED on operator flags.
 
+## Implemented in Phase 4
+
+- **Delivery entry is SUPERVISOR (own site) or ADMIN only — deliberately no
+  operator path.** Rationale: deliveries INCREASE stock, so a fabricated
+  delivery can mask fuel diversion indefinitely (issue the stolen fuel,
+  "deliver" it back on paper). Issues are self-limiting — they drain the
+  tank and surface at the next physical count — which makes inbound
+  movements a strictly higher control risk than outbound ones. Segregating
+  duties (operators issue, supervisors/admins receive) keeps one person
+  from controlling both sides of the ledger.
+- **Adjustments**: SUPERVISOR (own site) or ADMIN, mandatory audited
+  reason; MANAGER is excluded from BOTH writes (explicit allowlists) and
+  reads registers only.
+- **Guards on every inbound/correction write** (same guarded-update
+  pattern as issues, no raw SQL): deliveries cannot exceed tank capacity;
+  adjustments cannot drive stock negative or over capacity; delivery
+  backdating capped at 31 days, future timestamps rejected.
+- **Idempotency extended to deliveries and adjustments** (unique
+  client-minted keys; replay returns the original record) — a double-click
+  can no longer inflate stock.
+- **Reconciliation**: `npm run reconcile` replays every tank's full
+  movement chain (`balance_after[i] = balance_after[i-1] + quantity[i]`)
+  and compares the cache; exit code 1 on mismatch (schedulable). Cache
+  drift is repairable (`--repair` / ADMIN tRPC, audited as TANK_UPDATED);
+  a broken chain is NEVER auto-repaired — that means ledger rows are
+  inconsistent and demands investigation.
+- Audit: DELIVERY_RECORDED, ADJUSTMENT_RECORDED, TANK_UPDATED (cache
+  repair with before/after).
+
 ## Known gaps / roadmap
 
 | Item                                                                                                                                                                                                                                                                  | Phase |

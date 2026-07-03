@@ -102,6 +102,19 @@ ODOMETER_BLOCKED | INSUFFICIENT_STOCK`), mapped by the client state machine
 - The tank is never an API input: operator procedures read the binding from
   the session JWT, set at login by an ADMIN assignment.
 
+## Deliveries, adjustments, reconciliation (Phase 4)
+
+- `delivery.service.ts` / `adjustment.service.ts` mirror the fuel-issue
+  pattern: strict schemas, idempotency-key replay, typed result unions
+  (OVER_CAPACITY / INSUFFICIENT_STOCK), one atomic $transaction writing the
+  header + exactly one signed movement + cache, guarded updates for
+  capacity/floor race-safety.
+- `reconciliation-core.ts` is pure (no I/O, no path aliases) so both the
+  service and `scripts/reconcile.ts` (tsx CLI) share the same chain-replay
+  math. The CLI exits 1 on mismatch for scheduled-task monitoring;
+  `--repair` resyncs cache drift only — broken chains are never auto-fixed.
+- The D1 reconciliation panel on `/admin` renders a fresh run server-side.
+
 ## Conventions
 
 - Store timestamps in UTC; render in Asia/Colombo (UTC+5:30).

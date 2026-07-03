@@ -93,6 +93,19 @@ backoff after that). To unlock immediately in dev:
 docker exec fuel-tracking-postgres psql -U fuel_app -d fuel_tracking -c "UPDATE app_user SET failed_login_count = 0, locked_until = NULL WHERE username = 'operator1';"
 ```
 
+### Ledger reconciliation (Phase 4)
+
+```powershell
+npm run reconcile              # per-tank status; exit code 1 on any mismatch
+npm run reconcile -- --repair  # additionally resync drifted caches (audited)
+```
+
+Suitable for a Windows scheduled task (check the exit code). A "chain
+broken" result is never auto-repaired — it means ledger rows themselves are
+inconsistent and needs investigation. Deliveries and adjustments are
+recorded under Admin → Deliveries / Adjustments (supervisor: own site;
+manager: read-only; operators: no access by design — see docs/security.md).
+
 ### Trying the operator fuel flow (Phase 3)
 
 1. Sign in as `operator1` (Tank A · Diesel) → the M2 home shows the tank and

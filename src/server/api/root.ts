@@ -1,7 +1,10 @@
+import { adjustmentsRouter } from "@/server/api/routers/adjustments";
 import { auditRouter } from "@/server/api/routers/audit";
 import { authRouter } from "@/server/api/routers/auth";
+import { deliveriesRouter } from "@/server/api/routers/deliveries";
 import { fuelIssuesRouter } from "@/server/api/routers/fuel-issues";
 import { healthRouter } from "@/server/api/routers/health";
+import { reconciliationRouter } from "@/server/api/routers/reconciliation";
 import { qrTokensRouter } from "@/server/api/routers/qr-tokens";
 import { sitesRouter } from "@/server/api/routers/sites";
 import { tanksRouter } from "@/server/api/routers/tanks";
@@ -18,6 +21,9 @@ export const appRouter = createTRPCRouter({
   health: healthRouter,
   auth: authRouter,
   fuelIssues: fuelIssuesRouter,
+  deliveries: deliveriesRouter,
+  adjustments: adjustmentsRouter,
+  reconciliation: reconciliationRouter,
   sites: sitesRouter,
   tanks: tanksRouter,
   vehicles: vehiclesRouter,
