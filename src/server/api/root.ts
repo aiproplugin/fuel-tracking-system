@@ -1,6 +1,7 @@
 import { adjustmentsRouter } from "@/server/api/routers/adjustments";
 import { auditRouter } from "@/server/api/routers/audit";
 import { authRouter } from "@/server/api/routers/auth";
+import { dashboardRouter } from "@/server/api/routers/dashboard";
 import { deliveriesRouter } from "@/server/api/routers/deliveries";
 import { fuelIssuesRouter } from "@/server/api/routers/fuel-issues";
 import { healthRouter } from "@/server/api/routers/health";
@@ -20,6 +21,7 @@ import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 export const appRouter = createTRPCRouter({
   health: healthRouter,
   auth: authRouter,
+  dashboard: dashboardRouter,
   fuelIssues: fuelIssuesRouter,
   deliveries: deliveriesRouter,
   adjustments: adjustmentsRouter,
