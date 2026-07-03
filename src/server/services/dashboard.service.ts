@@ -1,7 +1,7 @@
 import type { MovementType } from "@prisma/client";
 import { startOfColomboDay } from "@/lib/format";
 import { db } from "@/server/db";
-import type { Actor } from "@/server/services/actor";
+import { effectiveSiteId, type Actor } from "@/server/services/actor";
 import type { DashboardRange } from "@/lib/schemas/dashboard";
 
 /**
@@ -23,18 +23,6 @@ const weekdayFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Colombo",
   weekday: "short",
 });
-
-/**
- * Effective site filter. Returns the siteId to constrain to, or `undefined`
- * for "all sites". A supervisor without a site resolves to a sentinel that
- * matches nothing (fails closed) rather than leaking every site.
- */
-function effectiveSiteId(actor: Actor, requestedSiteId?: string): string | undefined {
-  if (actor.role === "SUPERVISOR") {
-    return actor.siteId ?? "__none__";
-  }
-  return requestedSiteId ?? undefined;
-}
 
 export interface DashboardKpis {
   volumeLiters: number;

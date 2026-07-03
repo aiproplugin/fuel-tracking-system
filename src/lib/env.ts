@@ -12,6 +12,15 @@ const serverEnvSchema = z.object({
   NEXTAUTH_SECRET: z.string().min(32, "NEXTAUTH_SECRET must be at least 32 characters"),
   NEXTAUTH_URL: z.string().url(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  /**
+   * Drivers are fully modeled but their reports stay hidden until this flag is
+   * turned on — no migration required (CLAUDE.md). Accepts "true"/"1" (any
+   * case); anything else (or unset) is false.
+   */
+  FEATURE_DRIVER_REPORTS: z
+    .string()
+    .optional()
+    .transform((value) => value?.toLowerCase() === "true" || value === "1"),
 });
 
 function loadEnv(): z.infer<typeof serverEnvSchema> {
