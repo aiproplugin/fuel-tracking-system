@@ -81,7 +81,12 @@ export function ReportsClient() {
         <div className="w-full max-w-md space-y-1.5">
           <p className="text-sm font-semibold">Report</p>
           <Select
-            value={activeKey ?? undefined}
+            // Controlled from first render (defined ""), even before the report
+            // list loads and activeKey is still null — avoids Radix's
+            // uncontrolled→controlled warning. "" matches no item, so the
+            // placeholder shows until a report is chosen. Selection logic below
+            // is unchanged.
+            value={activeKey ?? ""}
             onValueChange={(value) => {
               setSelectedKey(value as ReportKey);
               setFilters(EMPTY_FILTERS);
