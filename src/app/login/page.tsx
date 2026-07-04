@@ -7,6 +7,15 @@ export const metadata: Metadata = {
 };
 
 /**
+ * Render per request (not statically prerendered) so the strict nonce-based CSP
+ * works: Next only stamps the per-request CSP nonce onto its scripts on
+ * dynamically rendered routes. A prerendered login page would ship scripts with
+ * no nonce and be blocked by `script-src 'nonce-…' 'strict-dynamic'`. Every
+ * other route is already dynamic (they read the session via cookies).
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * M1_Login — matches Frame / Mobile / M1_Login in docs/fuel-ui-prototype.html:
  * "F" logo tile, extrabold product title, muted description, rounded-[24px]
  * panel with username/password + teal Sign in, on-prem helper text.

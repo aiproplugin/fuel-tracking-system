@@ -74,6 +74,7 @@ enum AuditAction {
   TANK_UPDATED
   VEHICLE_CREATED
   VEHICLE_UPDATED
+  REPORT_EXPORTED
 }
 
 // ---------------------------------------------------------------------------

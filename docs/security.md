@@ -149,17 +149,141 @@
 - Audit: DELIVERY_RECORDED, ADJUSTMENT_RECORDED, TANK_UPDATED (cache
   repair with before/after).
 
+## Implemented in Phase 5
+
+- **Dashboards, KPIs, and alerts are read-only and server-scoped.** Every
+  dashboard query resolves the actor's role/site server-side; supervisors see
+  their own site, managers/admins see all. No dashboard path writes to the
+  ledger. The reconciliation panel and exception queue surface state read-only.
+- **No new mutation surface** was introduced — alerts (low stock, odometer
+  exceptions, abnormal consumption) are derived from existing ledger data, so
+  no additional authorization boundary was added.
+
+## Implemented in Phase 6
+
+- **Exports re-run the report server-side.** The CSV/XLSX download route
+  (`src/app/api/reports/export/route.ts`) re-executes the same scoped report
+  service; the browser only carries the current **filter selection** in the
+  query string, never assembled rows. There is no client-trusted data path into
+  an export.
+- **Same scoping on screen and in files.** On-screen figures and exports read
+  one source and apply identical site scoping and the driver-report gate — all
+  enforced server-side, not by hiding UI.
+- **CSV formula-injection defence** (`src/server/services/reports/csv.ts`):
+  cells beginning with `=`, `+`, `-`, `@`, tab, or CR are prefixed with a quote
+  so spreadsheets never evaluate report data as a formula; RFC-4180 quoting and
+  a UTF-8 BOM otherwise.
+- **No PII in export URLs** — only opaque IDs and date filters travel in the
+  query string; the plate/vehicle data lives in the response body.
+
+## Implemented in Phase 7
+
+- **Nonce-based CSP; `'unsafe-inline'` removed from `script-src`**
+  (`src/middleware.ts`): production emits
+  `script-src 'self' 'nonce-<per-request>' 'strict-dynamic'`. A fresh Web-Crypto
+  nonce is minted per request and set on both the request headers (so Next.js
+  stamps it onto its framework scripts) and the response header. `'self'`
+  remains only as a CSP2 fallback; `'strict-dynamic'` supersedes it in modern
+  browsers. Development keeps a permissive `script-src` (HMR/dev-overlay use
+  eval and un-nonced inline scripts). `style-src` still allows inline (Next/
+  Tailwind inject un-nonced styles; lower risk, out of scope here). A
+  header-presence test locks the production shape.
+- **Audit IP on every event via AsyncLocalStorage**
+  (`src/server/context/request-context.ts`): the tRPC route handler and the
+  export route bind the request's client IP (`x-forwarded-for` → `x-real-ip`)
+  into an async-local store; `recordAuditEvent` fills `ipAddress` from it
+  automatically, so business events (overrides, adjustments, deliveries, QR/user
+  admin, settings) are attributed to an IP — not just login/lockout. The
+  credentials flow still passes IP explicitly (it runs outside the tRPC
+  binding). IP is used only for attribution, never for authorization.
+- **Report exports are rate-limited and audited**: `exportRateLimiter`
+  (20 / 5 min per user) guards `/api/reports/export` (429 + `Retry-After`), and
+  every successful export writes a **`REPORT_EXPORTED`** audit row (actor,
+  format, row count, requested filters — no row data/PII). New `AuditAction`
+  enum value + migration `20260704120000_phase7_report_exported_audit`.
+- **Security test suite**:
+  - _Authz matrix_ (`authz-matrix.test.ts`) drives **every** procedure in the
+    real `appRouter` (dashboard/reports/fuel/admin/…) as each role and asserts
+    the exact allow/deny, and **locks the procedure set** — a new procedure
+    fails the build until its required role is declared.
+  - _Export security contract_ (`export-route.test.ts`): 401/403 (incl.
+    `mustChangePassword` and OPERATOR), 429 when rate-limited, and — on success —
+    the `Actor` is built from the **session** (a spoofed `siteId` query param is
+    ignored) and `REPORT_EXPORTED` is recorded.
+  - _Audit-coverage lock_ (`audit-coverage.test.ts`): asserts every
+    `AuditAction` enum value is actually emitted somewhere in the server/app
+    source — deleting an audit call fails the build.
+  - _Header presence_ (`middleware-headers.test.ts`): CSP nonce present and
+    **no `'unsafe-inline'` in `script-src`** in production, plus HSTS/
+    X-Frame-Options/nosniff/Referrer-Policy/Permissions-Policy.
+- **Deployment runbook** ([deployment.md](deployment.md)): least-privilege
+  `fuel_app` owner **plus a concrete split `fuel_runtime` role** (SELECT/INSERT/
+  UPDATE only — no DELETE/DDL, with `ALTER DEFAULT PRIVILEGES` for future
+  tables), localhost-only PostgreSQL with `scram-sha-256`, HTTPS reverse proxy
+  (required for the camera), firewall rules keeping app/DB ports local, backups,
+  scheduled reconciliation, and a post-deploy security checklist.
+- **Dependency review**: `npm audit` output triaged below; run it in CI on every
+  install.
+- **End-user guides** ([guides/](guides/)) explain how the controls surface in
+  practice (forced password change, generic login errors, lockout, ADMIN-only
+  overrides/tank assignment, append-only audit trail).
+
+## Dependency audit (Phase 7)
+
+Run `npm audit` on every CI install and review new advisories. Snapshot at this
+release: **7 advisories (4 high, 3 moderate); 4 reach runtime deps.** Every
+proposed fix is a **major** version bump (`next@16`, `eslint-config-next@16`, or
+a nonsensical `exceljs@3.4` downgrade), so all are triaged and accepted for this
+internal release rather than force-upgraded. Triage:
+
+- **Next.js 14.2.35 line** — a bundle of advisories (DoS via Server Components /
+  image optimizer, request smuggling in rewrites, i18n middleware bypass, cache
+  poisoning, SSRF on WebSocket upgrades). Fixes land only in Next 15.5.16+ / 16.
+  Accepted for an **internal, authenticated, single-tenant** deployment: no
+  `images.remotePatterns`, no i18n middleware, no Pages-Router rewrites, no
+  untrusted multi-tenant routing, and (see below) no shared HTML cache. A Next
+  major upgrade is scheduled as its own task.
+  - **CVE-2026-44581 — XSS in App Router apps using CSP nonces
+    (GHSA-ffhc-5mcf-pf4q, moderate).** Directly relevant because Phase 7 adds
+    nonce CSP. Affected: `>=13.4.0 <15.5.16`; **14.2.35 is in range** with no
+    14.2.x patch. Exploit requires ALL of: (a) nonce CSP, (b) deployment behind
+    a **shared cache**, and (c) a **malformed nonce derived from request
+    headers** reflected unsafely. Our exposure is minimal because:
+    - the nonce is generated **server-side** per request (`crypto.getRandomValues`
+      in `src/middleware.ts`), never derived from a client value;
+    - the middleware **overwrites** any incoming `Content-Security-Policy` and
+      `x-nonce` request headers (`Headers.set`), so a client cannot smuggle a
+      malformed nonce into Next's reflection path;
+    - the on-prem reverse proxy serves **dynamic, uncached HTML** (no shared
+      response cache), so the cache-poisoning vector does not apply.
+    Nonce CSP remains a net improvement over the prior `'unsafe-inline'` policy;
+    the Next upgrade will close the residual case. Re-verify this control after
+    the upgrade.
+  - **`postcss <8.5.10` (moderate)** — pulled in via Next's build toolchain
+    (`</style>` stringify XSS). Build-time CSS processing of first-party
+    stylesheets only; no untrusted CSS input. Cleared by the Next upgrade.
+- **`exceljs` → `uuid <11.1.1` (moderate, runtime).** The advisory is a missing
+  buffer-bounds check in uuid v3/v5/v6 **only when a caller passes its own `buf`
+  argument**. `exceljs` uses `uuid` to mint worksheet IDs **without** a `buf`
+  argument, so the vulnerable path is never reached. More importantly, the app
+  only ever **writes** workbooks from server-computed report rows and **never
+  parses uploaded/untrusted spreadsheets**, so exceljs's parsing surface is not
+  exposed at all. npm's suggested "fix" (`exceljs@3.4.0`) is an older major and
+  is rejected. Kept pinned; revisit if a fixed `exceljs`/`uuid` ships or if an
+  XLSX **import** feature is ever added.
+- **Dev-only: `glob` CLI / `@next/eslint-plugin-next` (via
+  `eslint-config-next`).** Lint-time tooling; not part of the runtime bundle, so
+  no production exposure. Cleared by the `eslint-config-next` major bump when we
+  take it.
+
 ## Known gaps / roadmap
 
-| Item                                                                                                                                                                                                                                                                  | Phase |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| Ownership/data-scoping checks in services (operator=own tank, supervisor=own site) as those procedures arrive                                                                                                                                                         | 2–3   |
-| Audit coverage for overrides, adjustments, role/tank assignment changes (auth events done)                                                                                                                                                                            | 2–4   |
-| Rate limiting: manual QR token entry, fuel submission (login done)                                                                                                                                                                                                    | 2–3   |
-| CSP without `'unsafe-inline'` for scripts (nonce-based)                                                                                                                                                                                                               | 7     |
-| `npm audit` in CI; dependency review                                                                                                                                                                                                                                  | 7     |
-| Known advisories against the Next.js **14.x line** (fixes only in Next 16) and dev-only `glob` CLI (via `eslint-config-next`). Accepted for now: internal network, no `remotePatterns` image config, no i18n middleware. Re-evaluate a Next major upgrade in Phase 7. | 7     |
-| Least-privilege production DB grants + HTTPS reverse proxy on Windows Server                                                                                                                                                                                          | 7     |
+| Item | When |
+| --- | --- |
+| Shared rate-limit store if the app is ever scaled beyond one process (in-memory today; fits the single-node on-prem target) | later |
+| `style-src` nonce/hash to drop inline styles (scripts already nonce-locked) | later |
+| Next.js major upgrade to clear 14.x advisories | later |
+| Optional `exceljs` replacement if an XLSX **import** feature is ever added | later |
 
 ## Threat-model notes (running list)
 

@@ -12,6 +12,30 @@ The visual spec is [docs/fuel-ui-prototype.html](docs/fuel-ui-prototype.html).
 
 ---
 
+## Documentation
+
+**Technical (for whoever installs and operates the server):**
+
+- [docs/deployment.md](docs/deployment.md) — Windows Server deployment runbook
+  (least-privilege DB, HTTPS reverse proxy, service setup, backups, scheduled
+  reconciliation, post-deploy checklist).
+- [docs/security.md](docs/security.md) — the living security document, controls
+  by phase, and the residual-risk register.
+- [docs/architecture.md](docs/architecture.md) — architecture and layering.
+
+**End-user guides** (standalone HTML — open by double-clicking in any browser, no
+internet needed; screenshots are placeholders to be added later):
+
+- [docs/guides/operator-guide.html](docs/guides/operator-guide.html) — for fuel
+  operators: signing in, scanning, recording an issue, and the block screens.
+- [docs/guides/manager-admin-guide.html](docs/guides/manager-admin-guide.html) —
+  for managers/admins: dashboard, reports & export, users/tanks/vehicles, audit
+  trail, reconciliation.
+- [docs/guides/help-troubleshooting-faq.html](docs/guides/help-troubleshooting-faq.html)
+  — common problems and fixes (locked account, camera, "no tank", alerts).
+
+---
+
 ## Development setup (Windows 10)
 
 ### Prerequisites

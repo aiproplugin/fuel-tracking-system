@@ -65,3 +65,10 @@ export function createRateLimiter({ limit, windowMs }: RateLimiterOptions) {
 
 /** Login attempts: 10 per 5 minutes per IP+username key. */
 export const loginRateLimiter = createRateLimiter({ limit: 10, windowMs: 5 * 60_000 });
+
+/**
+ * Report exports: 20 per 5 minutes per user. Exports are heavier than an
+ * on-screen run (up to 50k rows, XLSX assembly) and stream binary files, so
+ * they get their own, tighter budget keyed on the authenticated user id.
+ */
+export const exportRateLimiter = createRateLimiter({ limit: 20, windowMs: 5 * 60_000 });

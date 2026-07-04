@@ -1,5 +1,6 @@
 import type { AuditAction, Prisma } from "@prisma/client";
 import { logger } from "@/lib/logger";
+import { getRequestIp } from "@/server/context/request-context";
 import { db } from "@/server/db";
 
 export interface AuditEventInput {
@@ -11,6 +12,13 @@ export interface AuditEventInput {
   /** State snapshots where relevant; must never contain secrets or hashes. */
   before?: Prisma.InputJsonValue;
   after?: Prisma.InputJsonValue;
+  /**
+   * Explicit client IP. When omitted, it is filled in from the ambient
+   * request context (AsyncLocalStorage), so every audit event written during a
+   * request carries the originating IP without each caller passing it. Pass an
+   * explicit value (or null) only where there is no bound context — e.g. the
+   * Auth.js credentials flow, which resolves the IP from its own request.
+   */
   ipAddress?: string | null;
 }
 
@@ -55,6 +63,8 @@ export async function listAuditEvents(input: { cursor?: bigint | null; limit: nu
 
 export async function recordAuditEvent(event: AuditEventInput): Promise<void> {
   try {
+    // Explicit IP wins; otherwise attribute to the request-scoped context.
+    const ipAddress = event.ipAddress ?? getRequestIp();
     await db.auditLog.create({
       data: {
         actorId: event.actorId ?? null,
@@ -63,7 +73,7 @@ export async function recordAuditEvent(event: AuditEventInput): Promise<void> {
         entityId: event.entityId,
         before: event.before,
         after: event.after,
-        ipAddress: event.ipAddress ?? null,
+        ipAddress,
       },
     });
   } catch (error) {

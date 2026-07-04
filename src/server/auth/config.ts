@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { Role } from "@prisma/client";
 import { env } from "@/lib/env";
 import { loginInputSchema } from "@/lib/validation";
+import { clientIpFromHeaders } from "@/server/context/request-context";
 import { loginRateLimiter } from "@/server/security/rate-limit";
 import { recordAuditEvent } from "@/server/services/audit.service";
 import { verifyUserCredentials } from "@/server/services/user.service";
@@ -34,14 +35,14 @@ function asRole(value: unknown): Role {
 }
 
 /**
- * Best-effort client IP. Direct connections have no forwarding headers; the
- * production reverse proxy (Phase 7) sets x-forwarded-for.
+ * Best-effort client IP for the credentials flow. The Auth.js route runs
+ * outside the tRPC request-context binding, so login/lockout events resolve
+ * the IP explicitly from their own request. Direct connections have no
+ * forwarding headers; the production reverse proxy sets x-forwarded-for.
  */
 function getClientIp(request: Request | undefined): string | null {
   if (!request) return null;
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() ?? null;
-  return request.headers.get("x-real-ip");
+  return clientIpFromHeaders(request.headers);
 }
 
 /**
