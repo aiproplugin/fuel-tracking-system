@@ -20,6 +20,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Deliveries", href: "/admin/deliveries", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
   { label: "Adjustments", href: "/admin/adjustments", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
   { label: "Vehicles", href: "/admin/vehicles", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
+  { label: "Sites", href: "/admin/sites", roles: ["ADMIN"] },
   { label: "Tanks", href: "/admin/tanks", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
   { label: "Reports", href: "/admin/reports", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
   { label: "Users", href: "/admin/users", roles: ["ADMIN"] },

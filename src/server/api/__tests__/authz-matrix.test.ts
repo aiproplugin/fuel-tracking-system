@@ -58,6 +58,8 @@ const EXPECTED: Record<string, Access> = {
 
   "sites.list": SUPERVISOR_UP,
   "sites.create": ADMIN_ONLY,
+  "sites.update": ADMIN_ONLY,
+  "sites.delete": ADMIN_ONLY,
 
   "tanks.list": SUPERVISOR_UP,
   "tanks.stockSummary": SUPERVISOR_UP,

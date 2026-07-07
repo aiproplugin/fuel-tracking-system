@@ -56,7 +56,23 @@ ENV NEXTAUTH_URL="http://localhost:3000"
 
 RUN npm run build
 
-# ---------- Stage 3: minimal runtime ----------
+# ---------- Stage 3: isolated Prisma CLI dependency tree (for migrations) ----------
+# The Prisma CLI needs its COMPLETE transitive tree (prisma -> @prisma/config ->
+# effect, plus @prisma/engines, etc.). Cherry-picking prisma/ + @prisma/ into the
+# runner misses hoisted top-level transitive deps like `effect`, so the CLI fails
+# to load ("Cannot find module 'effect'"). Build a self-contained tree here with a
+# plain `npm install prisma`, pinned to the project's version, then copy it whole.
+FROM ${NODE_IMAGE} AS prisma-cli
+WORKDIR /prisma-cli
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# Read the pinned version from the app's package.json, kept at /tmp so this install
+# does NOT drag the app's own dependencies into the isolated CLI tree.
+COPY package.json /tmp/app-package.json
+RUN npm init -y >/dev/null \
+ && npm install --omit=dev prisma@$(node -p "require('/tmp/app-package.json').devDependencies.prisma")
+
+# ---------- Stage 4: minimal runtime ----------
 FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 
@@ -84,13 +100,26 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 # the builder — same base image => prebuilds/linux-x64/argon2.glibc.node loads.
 COPY --from=builder --chown=node:node /app/node_modules/argon2 ./node_modules/argon2
 
-# Prisma's generated client + runtime query engine (libquery_engine-*.so.node),
-# and the @prisma/* packages (incl. @prisma/engines for the migration engine).
+# sharp powers next/image optimization in standalone mode. Next loads it
+# dynamically at request time, so file-tracing does not reliably bundle it (the
+# "'sharp' is required ... for image optimization" warning). sharp 0.33 ships its
+# native code as prebuilt @img/* packages (the .node addon + bundled libvips .so),
+# installed by npm ci as platform-matched optional deps. Same base image =>
+# @img/sharp-linux-x64 + @img/sharp-libvips-linux-x64 load at runtime. Copy both
+# the JS entry (sharp) and the native packages (@img).
+COPY --from=builder --chown=node:node /app/node_modules/sharp ./node_modules/sharp
+COPY --from=builder --chown=node:node /app/node_modules/@img ./node_modules/@img
+
+# App RUNTIME Prisma: generated client + query engine (libquery_engine-*.so.node)
+# in .prisma, plus the @prisma/* packages @prisma/client depends on. (The
+# migration engine used by `migrate deploy` lives in the isolated CLI tree below.)
 COPY --from=builder --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
 
-# --- Prisma CLI + schema + migrations so the entrypoint can migrate on deploy ---
-COPY --from=builder --chown=node:node /app/node_modules/prisma ./node_modules/prisma
+# --- Prisma CLI (complete, isolated tree) + schema + migrations for migrate deploy ---
+# Kept under /app/prisma-cli so the CLI resolves its deps (effect, @prisma/config,
+# @prisma/engines, ...) from THIS tree, independently of the lean app node_modules.
+COPY --from=prisma-cli --chown=node:node /prisma-cli/node_modules ./prisma-cli/node_modules
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 
 # Entrypoint runs `prisma migrate deploy` (idempotent; never seeds) then execs

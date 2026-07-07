@@ -10,8 +10,9 @@ set -e
 
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
   echo "[entrypoint] Applying database migrations (prisma migrate deploy)..."
-  # Invoke the CLI directly by file so it works without a .bin symlink on PATH.
-  node node_modules/prisma/build/index.js migrate deploy
+  # Run the CLI from its isolated dependency tree (prisma-cli/), pointing at the
+  # app's schema. Invoked by file path so it needs no .bin symlink on PATH.
+  node prisma-cli/node_modules/prisma/build/index.js migrate deploy --schema=prisma/schema.prisma
   echo "[entrypoint] Migrations up to date."
 else
   echo "[entrypoint] RUN_MIGRATIONS=$RUN_MIGRATIONS — skipping migrations."

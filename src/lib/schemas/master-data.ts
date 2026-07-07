@@ -26,6 +26,10 @@ export const plateNumberSchema = z
 
 export const createSiteSchema = strictObject({ name: nameSchema });
 
+export const updateSiteSchema = strictObject({ id: idSchema, name: nameSchema });
+
+export const deleteSiteSchema = strictObject({ id: idSchema });
+
 // --- Tanks ------------------------------------------------------------------
 
 const litersPositive = z.number().positive().max(1_000_000);
