@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/lib/trpc/client";
 
 export interface SiteFormDialogProps {
@@ -23,12 +30,17 @@ export interface SiteFormDialogProps {
 }
 
 export function SiteFormDialog({ open, onOpenChange, site, onSaved }: SiteFormDialogProps) {
+  const companies = api.companies.list.useQuery(undefined, { enabled: open });
+  const noCompanies = companies.data !== undefined && companies.data.length === 0;
+
   const [name, setName] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setName(site?.name ?? "");
+      setCompanyId(site?.companyId ?? "");
       setErrorMessage(null);
     }
   }, [open, site]);
@@ -47,11 +59,15 @@ export function SiteFormDialog({ open, onOpenChange, site, onSaved }: SiteFormDi
     event.preventDefault();
     setErrorMessage(null);
     const trimmed = name.trim();
+    if (!companyId) {
+      setErrorMessage("Select the owning company.");
+      return;
+    }
 
     if (site) {
-      updateMutation.mutate({ id: site.id, name: trimmed });
+      updateMutation.mutate({ id: site.id, name: trimmed, companyId });
     } else {
-      createMutation.mutate({ name: trimmed });
+      createMutation.mutate({ name: trimmed, companyId });
     }
   }
 
@@ -64,6 +80,13 @@ export function SiteFormDialog({ open, onOpenChange, site, onSaved }: SiteFormDi
             Sites group tanks and users. A site name must be unique.
           </DialogDescription>
         </DialogHeader>
+
+        {noCompanies ? (
+          <p role="alert" className="rounded-2xl bg-warning/10 px-4 py-3 text-sm font-medium text-text">
+            Every site belongs to a company, and none exist yet. Create a company on the
+            Companies page first.
+          </p>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -79,6 +102,22 @@ export function SiteFormDialog({ open, onOpenChange, site, onSaved }: SiteFormDi
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="site-company">Company</Label>
+            <Select value={companyId} onValueChange={setCompanyId} disabled={noCompanies}>
+              <SelectTrigger id="site-company">
+                <SelectValue placeholder="Select a company" />
+              </SelectTrigger>
+              <SelectContent>
+                {(companies.data ?? []).map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {errorMessage ? (
             <p role="alert" className="text-sm font-medium text-danger">
               {errorMessage}
@@ -89,7 +128,7 @@ export function SiteFormDialog({ open, onOpenChange, site, onSaved }: SiteFormDi
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || noCompanies}>
               {isSaving ? "Saving…" : site ? "Save changes" : "Add site"}
             </Button>
           </DialogFooter>

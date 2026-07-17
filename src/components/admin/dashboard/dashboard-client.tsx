@@ -63,9 +63,9 @@ export function DashboardClient({
           tone={kpis && kpis.lowStockTanks > 0 ? "warning" : "default"}
         />
         <KpiCard
-          label="Odometer exceptions"
-          value={show(String(kpis?.odometerExceptionsPending ?? 0))}
-          tone={kpis && kpis.odometerExceptionsPending > 0 ? "danger" : "default"}
+          label="Meter exceptions"
+          value={show(String(kpis?.meterExceptionsPending ?? 0))}
+          tone={kpis && kpis.meterExceptionsPending > 0 ? "danger" : "default"}
         />
         <KpiCard
           label="Abnormal consumption"

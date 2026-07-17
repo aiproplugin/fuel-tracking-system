@@ -31,7 +31,7 @@ export function VehiclesClient() {
       <PageHeader
         eyebrow="Master data"
         title="Vehicles"
-        description="Fleet vehicles with their fuel type and consumption class. Odometers only move through recorded fuel issues."
+        description="Fleet vehicles with their fuel type and consumption class. Meter readings only move through recorded fuel issues."
         actions={isAdmin ? <Button onClick={openCreate}>Add vehicle</Button> : undefined}
       />
 

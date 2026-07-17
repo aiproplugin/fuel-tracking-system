@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Logo } from "@/components/brand/logo";
 import { Badge } from "@/components/ui/badge";
 import { formatLiters, formatTime } from "@/lib/format";
+import { METER_CONFIG } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
 function greetingForNow(): string {
@@ -108,7 +109,7 @@ export function OperatorHomeClient({ displayName }: { displayName: string }) {
                   {issue.plateNumber}
                   {issue.isAbnormal ? (
                     <Badge variant="warning" className="ml-2">
-                      km/L
+                      {METER_CONFIG[issue.meterType].efficiencyUnit}
                     </Badge>
                   ) : null}
                 </span>

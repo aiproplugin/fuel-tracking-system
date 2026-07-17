@@ -355,10 +355,11 @@
         </details>
 
         <details>
-          <summary>Amber "Odometer lower than previous record" <span class="who chip op">Operator</span></summary>
+          <summary>Amber "Meter reading lower than previous record" <span class="who chip op">Operator</span></summary>
           <div class="answer">
-            <p>Your odometer entry is below the vehicle's last recorded reading. Since odometers only
-              go up, the app blocks it.</p>
+            <p>Your meter entry is below the vehicle's last recorded reading. A usage meter —
+              odometer (km), hour meter (hrs), or energy meter (kWh) — only goes up, so the app
+              blocks it.</p>
             <ul>
               <li><strong>If you mistyped:</strong> tap <span class="field">Go back</span> and enter
                 the correct, higher reading.</li>
@@ -371,18 +372,18 @@
         </details>
 
         <details>
-          <summary>I flagged an odometer — now what? <span class="who chip both">Everyone</span></summary>
+          <summary>I flagged a meter reading — now what? <span class="who chip both">Everyone</span></summary>
           <div class="answer">
             <p><strong>Operator:</strong> nothing more to do. Move to the next vehicle; the fill is
               recorded automatically after approval.</p>
             <p><strong>Admin:</strong> it appears in the exception queue on the dashboard and on the
               <span class="field">Fuel Issues</span> page. Verify the true reading, then approve with
-              a corrected odometer and a reason, or reject with a reason. Only admins can do this.</p>
+              a corrected reading and a reason, or reject with a reason. Only admins can do this.</p>
           </div>
         </details>
 
         <details>
-          <summary>Why can't a supervisor or manager override the odometer? <span class="who chip both">Everyone</span></summary>
+          <summary>Why can't a supervisor or manager override the meter reading? <span class="who chip both">Everyone</span></summary>
           <div class="answer">
             <p>Overrides change a recorded reading, so the authority is deliberately narrow —
               <strong>administrators only</strong>. Supervisors and managers cannot override;
@@ -399,30 +400,33 @@
         <details open>
           <summary>An "Abnormal consumption" alert appeared <span class="who chip both">Everyone</span></summary>
           <div class="answer">
-            <p>The fill's fuel economy (km/L) fell outside the expected range for that vehicle type.
+            <p>The fill's efficiency (km/L, hrs/L, or kWh/L depending on the vehicle) fell outside
+              the expected range for that vehicle type.
               <strong>The fuel issue is still recorded</strong> — the alert just marks it for review.</p>
-            <p><strong>Operator:</strong> nothing to fix; just confirm you entered the odometer
+            <p><strong>Operator:</strong> nothing to fix; just confirm you entered the meter reading
               correctly. A mistyped reading is the most common innocent cause.</p>
             <p><strong>Admin:</strong> review it on the dashboard/reports. If lots of clean fills are
-              being flagged, widen the type's km/L band in <span class="field">Settings</span>; if
-              real waste slips through, tighten it.</p>
+              being flagged, widen the type's efficiency band in <span class="field">Settings</span>;
+              if real waste slips through, tighten it.</p>
           </div>
         </details>
 
         <details>
-          <summary>Where do I set the expected km/L range? <span class="who chip admin">Admin</span></summary>
+          <summary>Where do I set the expected efficiency range? <span class="who chip admin">Admin</span></summary>
           <div class="answer">
-            <p><span class="field">Settings</span> (admin only) → edit a vehicle type → set
-              <strong>Min km/L</strong> and <strong>Max km/L</strong> (min must be below max) →
-              <span class="field">Save band</span>. Changes are audit-logged with before/after
-              values. Any fill outside the band is flagged as abnormal.</p>
+            <p><span class="field">Settings</span> (admin only) → edit a vehicle type → pick its
+              <strong>meter type</strong> (odometer km / hour meter hrs / energy meter kWh) and set
+              the <strong>Min</strong> and <strong>Max</strong> band in that unit per litre (min
+              must be below max) → <span class="field">Save band</span>. Changes are audit-logged
+              with before/after values. Any fill outside the band is flagged as abnormal. The meter
+              type locks once vehicles of the type have recorded fills.</p>
           </div>
         </details>
 
         <details>
-          <summary>"Odometer exceptions" KPI is red <span class="who chip admin">Admin</span></summary>
+          <summary>"Meter exceptions" KPI is red <span class="who chip admin">Admin</span></summary>
           <div class="answer">
-            <p>Operators have flagged odometer readings waiting for your approval. Open the exception
+            <p>Operators have flagged meter readings waiting for your approval. Open the exception
               queue on the dashboard (or the Fuel Issues page) and clear them — each flagged fill
               stays unrecorded until you approve a corrected reading or reject it.</p>
           </div>
@@ -432,7 +436,7 @@
           <summary>An efficiency figure says "Calculates after next fill" <span class="who chip both">Everyone</span></summary>
           <div class="answer">
             <p>The first time a vehicle is fuelled there's no previous fill to measure against, so
-              there's no km/L yet. This is expected — it appears from the next fill onward. It is
+              there's no efficiency figure yet. This is expected — it appears from the next fill onward. It is
               never an error.</p>
           </div>
         </details>
@@ -452,7 +456,7 @@
               <tr><td>Dashboard, Fuel Issues, Vehicles, Tanks, Reports</td><td>Supervisor</td></tr>
               <tr><td>Deliveries, Adjustments (recording)</td><td>Supervisor (Manager = read-only)</td></tr>
               <tr><td>Audit trail</td><td>Manager</td></tr>
-              <tr><td>Users, QR Tokens, Settings, odometer overrides</td><td>Admin</td></tr>
+              <tr><td>Users, QR Tokens, Settings, meter overrides</td><td>Admin</td></tr>
             </table></div>
             <p>If you believe your role is wrong, an administrator can change it on the
               <span class="field">Users</span> page.</p>
@@ -495,15 +499,15 @@
         <h1>Glossary</h1>
         <div class="tablewrap"><table>
           <tr><th>Term</th><th>What it means</th></tr>
-          <tr><td>Fuel issue</td><td>A recorded fill: litres dispensed to a vehicle from a tank, with an odometer reading.</td></tr>
+          <tr><td>Fuel issue</td><td>A recorded fill: litres dispensed to a vehicle from a tank, with a meter reading (km, hrs, or kWh per the vehicle type).</td></tr>
           <tr><td>Delivery</td><td>Fuel received <em>into</em> a tank. Recorded by supervisors/admins. Increases stock.</td></tr>
           <tr><td>Adjustment</td><td>A signed stock correction with a mandatory reason (e.g. after a physical count).</td></tr>
           <tr><td>Ledger</td><td>The permanent, append-only record. Every issue, delivery, and adjustment is one row that stores the balance after it.</td></tr>
           <tr><td>Reconciliation</td><td>Checking that each tank's quick "current stock" number still matches the ledger.</td></tr>
           <tr><td>Cache mismatch</td><td>The current-stock number drifted from the ledger. Safely repairable.</td></tr>
           <tr><td>Chain broken</td><td>The ledger rows themselves don't add up. Serious — investigate, never auto-repair.</td></tr>
-          <tr><td>Odometer override</td><td>Admin approval of a corrected odometer after an operator flagged a low reading. Reason required, audited.</td></tr>
-          <tr><td>Abnormal consumption</td><td>A fill whose km/L is outside the vehicle type's expected band. Recorded, then flagged for review.</td></tr>
+          <tr><td>Meter override</td><td>Admin approval of a corrected meter reading after an operator flagged a low reading. Reason required, audited.</td></tr>
+          <tr><td>Abnormal consumption</td><td>A fill whose efficiency (km/L, hrs/L, kWh/L) is outside the vehicle type's expected band. Recorded, then flagged for review.</td></tr>
           <tr><td>QR token</td><td>An opaque code (<code>FT-…</code>) that identifies a vehicle when scanned — never the plate. Can be rotated.</td></tr>
           <tr><td>Tank binding</td><td>The single tank an operator is tied to. Set by an admin; applies at next sign-in.</td></tr>
           <tr><td>Audit trail</td><td>The append-only log of who did what, when — logins, overrides, adjustments, and more.</td></tr>

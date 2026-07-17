@@ -2,10 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/admin/page-header";
+import { QuotaSettingsCard } from "@/components/admin/settings/quota-settings-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -15,19 +23,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { METER_CONFIG, METER_TYPES, type MeterTypeName } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
 interface EditState {
   id?: string;
   name: string;
+  meterType: MeterTypeName;
   min: string;
   max: string;
 }
 
 /**
- * Settings — per-vehicle-type km/L bounds (the abnormal-consumption bands).
- * A fuel issue whose efficiency falls outside its type's band gets flagged
- * (Phase 3).
+ * Settings — per-vehicle-type meter type + efficiency bands (the
+ * abnormal-consumption bands, in the type's own unit per litre: km/L, hrs/L,
+ * kWh/L). A fuel issue whose efficiency falls outside its type's band gets
+ * flagged (Phase 3). The meter type locks once the type has recorded history
+ * (server-enforced).
  */
 export function SettingsClient() {
   const utils = api.useUtils();
@@ -52,31 +64,36 @@ export function SettingsClient() {
     upsertMutation.mutate({
       ...(editing.id ? { id: editing.id } : {}),
       name: editing.name.trim(),
-      minKmPerLiter: Number(editing.min),
-      maxKmPerLiter: Number(editing.max),
+      meterType: editing.meterType,
+      minEfficiency: Number(editing.min),
+      maxEfficiency: Number(editing.max),
     });
   }
+
+  const editingUnit = editing ? METER_CONFIG[editing.meterType].efficiencyUnit : null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Configuration"
         title="Settings"
-        description="Expected km/L band per vehicle type. Fuel issues outside their band are flagged as abnormal consumption."
+        description="Meter type and expected efficiency band per vehicle type (km/L, hrs/L, or kWh/L). Fuel issues outside their band are flagged as abnormal consumption."
         actions={
-          <Button onClick={() => setEditing({ name: "", min: "", max: "" })}>
+          <Button onClick={() => setEditing({ name: "", meterType: "DISTANCE", min: "", max: "" })}>
             Add vehicle type
           </Button>
         }
       />
+
+      <QuotaSettingsCard />
 
       <TableContainer>
         <Table>
           <TableHeader>
             <tr>
               <TableHead>Vehicle type</TableHead>
-              <TableHead>Min km/L</TableHead>
-              <TableHead>Max km/L</TableHead>
+              <TableHead>Meter</TableHead>
+              <TableHead>Expected band</TableHead>
               <TableHead>Vehicles</TableHead>
               <TableHead />
             </tr>
@@ -92,8 +109,13 @@ export function SettingsClient() {
               (types.data ?? []).map((type) => (
                 <TableRow key={type.id}>
                   <TableCell className="font-semibold">{type.name}</TableCell>
-                  <TableCell>{type.minKmPerLiter.toFixed(2)}</TableCell>
-                  <TableCell>{type.maxKmPerLiter.toFixed(2)}</TableCell>
+                  <TableCell className="text-muted">
+                    {METER_CONFIG[type.meterType].meterLabel} ({METER_CONFIG[type.meterType].unit})
+                  </TableCell>
+                  <TableCell>
+                    {type.minEfficiency.toFixed(2)}–{type.maxEfficiency.toFixed(2)}{" "}
+                    {METER_CONFIG[type.meterType].efficiencyUnit}
+                  </TableCell>
                   <TableCell className="text-muted">{type.vehicleCount}</TableCell>
                   <TableCell>
                     <span className="flex justify-end">
@@ -104,8 +126,9 @@ export function SettingsClient() {
                           setEditing({
                             id: type.id,
                             name: type.name,
-                            min: String(type.minKmPerLiter),
-                            max: String(type.maxKmPerLiter),
+                            meterType: type.meterType,
+                            min: String(type.minEfficiency),
+                            max: String(type.maxEfficiency),
                           })
                         }
                       >
@@ -125,11 +148,13 @@ export function SettingsClient() {
           <CardHeader>
             <CardTitle>{editing.id ? `Edit ${editing.name}` : "New vehicle type"}</CardTitle>
             <CardDescription>
-              Minimum must be below maximum. Changes are audit-logged with before/after values.
+              Minimum must be below maximum, in the meter type&apos;s efficiency unit. The meter
+              type cannot change once vehicles of this type have recorded fuel issues. Changes are
+              audit-logged with before/after values.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-3">
+            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label htmlFor="type-name">Name</Label>
                 <Input
@@ -142,7 +167,27 @@ export function SettingsClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="type-min">Min km/L</Label>
+                <Label htmlFor="type-meter">Meter type</Label>
+                <Select
+                  value={editing.meterType}
+                  onValueChange={(value) =>
+                    setEditing({ ...editing, meterType: value as MeterTypeName })
+                  }
+                >
+                  <SelectTrigger id="type-meter">
+                    <SelectValue placeholder="Select meter type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {METER_TYPES.map((meterType) => (
+                      <SelectItem key={meterType} value={meterType}>
+                        {METER_CONFIG[meterType].meterLabel} ({METER_CONFIG[meterType].unit})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="type-min">Min ({editingUnit})</Label>
                 <Input
                   id="type-min"
                   type="number"
@@ -154,7 +199,7 @@ export function SettingsClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="type-max">Max km/L</Label>
+                <Label htmlFor="type-max">Max ({editingUnit})</Label>
                 <Input
                   id="type-max"
                   type="number"
@@ -167,12 +212,15 @@ export function SettingsClient() {
               </div>
 
               {errorMessage ? (
-                <p role="alert" className="text-sm font-medium text-danger sm:col-span-3">
+                <p
+                  role="alert"
+                  className="text-sm font-medium text-danger sm:col-span-2 lg:col-span-4"
+                >
                   {errorMessage}
                 </p>
               ) : null}
 
-              <div className="flex gap-3 sm:col-span-3">
+              <div className="flex gap-3 sm:col-span-2 lg:col-span-4">
                 <Button type="submit" disabled={upsertMutation.isPending}>
                   {upsertMutation.isPending ? "Saving…" : "Save band"}
                 </Button>

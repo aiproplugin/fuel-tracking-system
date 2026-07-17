@@ -1,6 +1,8 @@
 import { adjustmentsRouter } from "@/server/api/routers/adjustments";
 import { auditRouter } from "@/server/api/routers/audit";
 import { authRouter } from "@/server/api/routers/auth";
+import { companiesRouter } from "@/server/api/routers/companies";
+import { quotasRouter } from "@/server/api/routers/quotas";
 import { dashboardRouter } from "@/server/api/routers/dashboard";
 import { deliveriesRouter } from "@/server/api/routers/deliveries";
 import { fuelIssuesRouter } from "@/server/api/routers/fuel-issues";
@@ -28,6 +30,8 @@ export const appRouter = createTRPCRouter({
   adjustments: adjustmentsRouter,
   reconciliation: reconciliationRouter,
   reports: reportsRouter,
+  companies: companiesRouter,
+  quotas: quotasRouter,
   sites: sitesRouter,
   tanks: tanksRouter,
   vehicles: vehiclesRouter,

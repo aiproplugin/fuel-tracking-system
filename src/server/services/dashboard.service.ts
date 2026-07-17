@@ -1,5 +1,6 @@
 import type { MovementType } from "@prisma/client";
 import { startOfColomboDay } from "@/lib/format";
+import { formatEfficiency, formatMeter } from "@/lib/meter";
 import { db } from "@/server/db";
 import { effectiveSiteId, type Actor } from "@/server/services/actor";
 import type { DashboardRange } from "@/lib/schemas/dashboard";
@@ -29,7 +30,7 @@ export interface DashboardKpis {
   petrolStockLiters: number;
   dieselStockLiters: number;
   lowStockTanks: number;
-  odometerExceptionsPending: number;
+  meterExceptionsPending: number;
   abnormalConsumption: number;
 }
 
@@ -39,7 +40,7 @@ export interface DailyLitersPoint {
   liters: number;
 }
 
-export type ExceptionKind = "ODOMETER" | "LOW_STOCK" | "EFFICIENCY";
+export type ExceptionKind = "METER" | "LOW_STOCK" | "EFFICIENCY";
 
 export interface ExceptionQueueItem {
   id: string;
@@ -100,60 +101,70 @@ export async function getDashboardSummary(
   const weekStart = buckets[0]!.start;
   const volumeWindowStart = input.range === "TODAY" ? todayStart : weekStart;
 
-  const [tanks, weekTransactions, pendingExceptionCount, pendingExceptions, abnormalRecent, movements] =
-    await Promise.all([
-      db.tank.findMany({
-        where: { ...tankWhere, isActive: true },
-        select: { fuelType: true, currentStock: true, lowStockThreshold: true, name: true },
-      }),
-      // One scan of the 7-day window feeds both the chart and the volume/abnormal KPIs.
-      db.fuelTransaction.findMany({
-        where: { ...relWhere, issuedAt: { gte: weekStart } },
-        select: { issuedAt: true, liters: true, isAbnormal: true },
-      }),
-      db.odometerException.count({ where: { status: "PENDING", ...relWhere } }),
-      db.odometerException.findMany({
-        where: { status: "PENDING", ...relWhere },
-        orderBy: { createdAt: "asc" },
-        take: QUEUE_CATEGORY_LIMIT,
-        select: {
-          id: true,
-          attemptedOdometer: true,
-          previousOdometer: true,
-          vehicle: { select: { plateNumber: true } },
-          tank: { select: { name: true } },
+  const [
+    tanks,
+    weekTransactions,
+    pendingExceptionCount,
+    pendingExceptions,
+    abnormalRecent,
+    movements,
+  ] = await Promise.all([
+    db.tank.findMany({
+      where: { ...tankWhere, isActive: true },
+      select: { fuelType: true, currentStock: true, lowStockThreshold: true, name: true },
+    }),
+    // One scan of the 7-day window feeds both the chart and the volume/abnormal KPIs.
+    db.fuelTransaction.findMany({
+      where: { ...relWhere, issuedAt: { gte: weekStart } },
+      select: { issuedAt: true, liters: true, isAbnormal: true },
+    }),
+    db.meterException.count({ where: { status: "PENDING", ...relWhere } }),
+    db.meterException.findMany({
+      where: { status: "PENDING", ...relWhere },
+      orderBy: { createdAt: "asc" },
+      take: QUEUE_CATEGORY_LIMIT,
+      select: {
+        id: true,
+        attemptedReading: true,
+        previousReading: true,
+        vehicle: {
+          select: { plateNumber: true, vehicleType: { select: { meterType: true } } },
         },
-      }),
-      db.fuelTransaction.findMany({
-        where: { ...relWhere, isAbnormal: true, issuedAt: { gte: weekStart } },
-        orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
-        take: QUEUE_CATEGORY_LIMIT,
-        select: {
-          id: true,
-          kmPerLiter: true,
-          vehicle: { select: { plateNumber: true } },
-          tank: { select: { name: true } },
+        tank: { select: { name: true } },
+      },
+    }),
+    db.fuelTransaction.findMany({
+      where: { ...relWhere, isAbnormal: true, issuedAt: { gte: weekStart } },
+      orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+      take: QUEUE_CATEGORY_LIMIT,
+      select: {
+        id: true,
+        efficiency: true,
+        vehicle: {
+          select: { plateNumber: true, vehicleType: { select: { meterType: true } } },
         },
-      }),
-      db.stockMovement.findMany({
-        where: relWhere,
-        orderBy: { id: "desc" },
-        take: RECENT_LIMIT,
-        select: {
-          id: true,
-          type: true,
-          quantity: true,
-          balanceAfter: true,
-          createdAt: true,
-          tank: { select: { name: true } },
-          fuelTransaction: {
-            select: { issuedAt: true, isAbnormal: true, vehicle: { select: { plateNumber: true } } },
-          },
-          delivery: { select: { deliveredAt: true, supplierName: true } },
-          adjustment: { select: { adjustedAt: true } },
+        tank: { select: { name: true } },
+      },
+    }),
+    db.stockMovement.findMany({
+      where: relWhere,
+      orderBy: { id: "desc" },
+      take: RECENT_LIMIT,
+      select: {
+        id: true,
+        type: true,
+        quantity: true,
+        balanceAfter: true,
+        createdAt: true,
+        tank: { select: { name: true } },
+        fuelTransaction: {
+          select: { issuedAt: true, isAbnormal: true, vehicle: { select: { plateNumber: true } } },
         },
-      }),
-    ]);
+        delivery: { select: { deliveredAt: true, supplierName: true } },
+        adjustment: { select: { adjustedAt: true } },
+      },
+    }),
+  ]);
 
   // --- Chart + volume/abnormal KPIs (single pass over the 7-day window) ------
   let volumeLiters = 0;
@@ -161,7 +172,9 @@ export async function getDashboardSummary(
   for (const txn of weekTransactions) {
     const liters = txn.liters.toNumber();
     const at = txn.issuedAt.getTime();
-    const bucket = buckets.find((candidate) => at >= candidate.start.getTime() && at < candidate.end.getTime());
+    const bucket = buckets.find(
+      (candidate) => at >= candidate.start.getTime() && at < candidate.end.getTime(),
+    );
     if (bucket) bucket.liters += liters;
     if (at >= volumeWindowStart.getTime()) {
       volumeLiters += liters;
@@ -180,10 +193,10 @@ export async function getDashboardSummary(
   // --- Exception / alert queue ----------------------------------------------
   const exceptionQueue: ExceptionQueueItem[] = [
     ...pendingExceptions.map((row) => ({
-      id: `odo-${row.id}`,
-      kind: "ODOMETER" as const,
+      id: `meter-${row.id}`,
+      kind: "METER" as const,
       title: row.vehicle.plateNumber,
-      detail: `Attempted ${row.attemptedOdometer.toLocaleString("en-US")} km (last ${row.previousOdometer.toLocaleString("en-US")} km) · ${row.tank.name}`,
+      detail: `Attempted ${formatMeter(row.attemptedReading, row.vehicle.vehicleType.meterType)} (last ${formatMeter(row.previousReading, row.vehicle.vehicleType.meterType)}) · ${row.tank.name}`,
     })),
     ...lowStockTanks.slice(0, QUEUE_CATEGORY_LIMIT).map((tank) => ({
       id: `low-${tank.name}`,
@@ -195,7 +208,7 @@ export async function getDashboardSummary(
       id: `eff-${row.id}`,
       kind: "EFFICIENCY" as const,
       title: row.vehicle.plateNumber,
-      detail: `${row.kmPerLiter ? `${row.kmPerLiter.toNumber().toFixed(2)} km/L · ` : ""}outside configured band · ${row.tank.name}`,
+      detail: `${row.efficiency ? `${formatEfficiency(row.efficiency.toNumber(), row.vehicle.vehicleType.meterType)} · ` : ""}outside configured band · ${row.tank.name}`,
     })),
   ];
 
@@ -238,7 +251,7 @@ export async function getDashboardSummary(
       petrolStockLiters: sumStock("PETROL"),
       dieselStockLiters: sumStock("DIESEL"),
       lowStockTanks: lowStockTanks.length,
-      odometerExceptionsPending: pendingExceptionCount,
+      meterExceptionsPending: pendingExceptionCount,
       abnormalConsumption,
     },
     dailyLiters: buckets.map((bucket) => ({

@@ -3,54 +3,71 @@ import { TRPCError } from "@trpc/server";
 import { db } from "@/server/db";
 import { recordAuditEvent } from "@/server/services/audit.service";
 
-/** List all sites with tank/user counts (used by forms and the sites page). */
+/** List all sites with owning company and tank/user counts. */
 export async function listSites() {
   const sites = await db.site.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { tanks: true, users: true } } },
+    include: {
+      company: { select: { id: true, name: true } },
+      _count: { select: { tanks: true, users: true } },
+    },
   });
   return sites.map((site) => ({
     id: site.id,
     name: site.name,
+    companyId: site.company.id,
+    companyName: site.company.name,
     tankCount: site._count.tanks,
     userCount: site._count.users,
   }));
 }
 
-/** Create a site (ADMIN). Audited. Duplicate name -> friendly CONFLICT. */
-export async function createSite(actorId: string, input: { name: string }) {
+function mapSiteWriteError(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      throw new TRPCError({ code: "CONFLICT", message: "A site with this name already exists." });
+    }
+    if (error.code === "P2003") {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Selected company does not exist." });
+    }
+  }
+  throw error;
+}
+
+/** Create a site (ADMIN). Every site belongs to a company. Audited. */
+export async function createSite(actorId: string, input: { name: string; companyId: string }) {
   try {
-    const site = await db.site.create({ data: { name: input.name } });
+    const site = await db.site.create({ data: { name: input.name, companyId: input.companyId } });
     await recordAuditEvent({
       actorId,
       action: "SITE_CREATED",
       entityType: "site",
       entityId: site.id,
-      after: { name: site.name },
+      after: { name: site.name, companyId: site.companyId },
     });
     return { id: site.id, name: site.name };
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new TRPCError({ code: "CONFLICT", message: "A site with this name already exists." });
-    }
-    throw error;
+    mapSiteWriteError(error);
   }
 }
 
-/** Rename a site (ADMIN). Audited with before/after. Duplicate name -> CONFLICT. */
-export async function updateSite(actorId: string, input: { id: string; name: string }) {
+/** Rename/reassign a site (ADMIN). Audited with before/after. */
+export async function updateSite(
+  actorId: string,
+  input: { id: string; name: string; companyId: string },
+) {
   const before = await db.site.findUnique({ where: { id: input.id } });
   if (!before) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Site not found." });
   }
 
   try {
-    await db.site.update({ where: { id: input.id }, data: { name: input.name } });
+    await db.site.update({
+      where: { id: input.id },
+      data: { name: input.name, companyId: input.companyId },
+    });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new TRPCError({ code: "CONFLICT", message: "A site with this name already exists." });
-    }
-    throw error;
+    mapSiteWriteError(error);
   }
 
   await recordAuditEvent({
@@ -58,8 +75,8 @@ export async function updateSite(actorId: string, input: { id: string; name: str
     action: "SITE_UPDATED",
     entityType: "site",
     entityId: input.id,
-    before: { name: before.name },
-    after: { name: input.name },
+    before: { name: before.name, companyId: before.companyId },
+    after: { name: input.name, companyId: input.companyId },
   });
 }
 

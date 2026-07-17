@@ -1,20 +1,34 @@
 import ExcelJS from "exceljs";
-import { formatReportCell } from "@/lib/reports/format-cell";
+import { METER_CONFIG, type MeterTypeName } from "@/lib/meter";
+import { formatReportCell, rowMeterType } from "@/lib/reports/format-cell";
 import type { ReportColumnType, ReportResult } from "@/server/services/reports/report-types";
 
 /**
  * Formatted .xlsx for the management summaries. Numeric cells are written as
  * REAL numbers with a matching number format (so totals stay computable in
  * Excel and identical to the on-screen figure); text/datetime cells use the
- * same formatter as the screen and CSV.
+ * same formatter as the screen and CSV. Meter/efficiency formats carry the
+ * ROW's unit (km vs hrs vs kWh) so mixed-fleet sheets stay unambiguous.
  */
 
 const NUM_FMT: Partial<Record<ReportColumnType, string>> = {
   liters: '#,##0.00 "L"',
-  km: '#,##0 "km"',
-  kmpl: "0.00",
   number: "#,##0",
 };
+
+/** Number format for a cell, resolving meter/efficiency units per row. */
+function cellNumFmt(
+  type: ReportColumnType,
+  meterType: MeterTypeName | undefined,
+): string | undefined {
+  if (type === "meter") {
+    return meterType ? `#,##0" ${METER_CONFIG[meterType].unit}"` : "#,##0";
+  }
+  if (type === "efficiency") {
+    return meterType ? `0.00" ${METER_CONFIG[meterType].efficiencyUnit}"` : "0.00";
+  }
+  return NUM_FMT[type];
+}
 
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
@@ -62,15 +76,16 @@ export async function reportToXlsx(result: ReportResult): Promise<ArrayBuffer> {
   // Data rows.
   result.rows.forEach((row, rowIndex) => {
     const excelRow = sheet.getRow(headerRowIndex + 1 + rowIndex);
+    const meterType = rowMeterType(row);
     result.columns.forEach((column, columnIndex) => {
       const cell = excelRow.getCell(columnIndex + 1);
       const raw = row[column.key] ?? null;
-      const numFmt = NUM_FMT[column.type];
+      const numFmt = cellNumFmt(column.type, meterType);
       if (numFmt && typeof raw === "number") {
         cell.value = raw;
         cell.numFmt = numFmt;
       } else {
-        cell.value = formatReportCell(raw, column.type);
+        cell.value = formatReportCell(raw, column.type, meterType);
       }
     });
     excelRow.commit();

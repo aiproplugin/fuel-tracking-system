@@ -4,8 +4,15 @@ import type { ReportKey } from "@/lib/schemas/reports";
  * Shared report shapes. Rows carry PRIMITIVE values (numbers stay numbers) so
  * that the on-screen table, the CSV, and the XLSX all render the exact same
  * underlying figure — presentation-layer formatting never changes the number.
+ *
+ * "meter" and "efficiency" cells are unit-less numbers; their unit comes from
+ * the row's meter type, carried in the reserved `_meterType` key (underscore
+ * keys are never columns, so CSV/XLSX/table headers skip them — same
+ * convention as `_vehicleId`). Renderers resolve it via `rowMeterType()` in
+ * src/lib/reports/format-cell.ts so mixed-fleet rows always show their own
+ * unit and no renderer ever mixes meter types.
  */
-export type ReportColumnType = "text" | "number" | "liters" | "km" | "kmpl" | "datetime";
+export type ReportColumnType = "text" | "number" | "liters" | "meter" | "efficiency" | "datetime";
 
 export interface ReportColumn {
   key: string;

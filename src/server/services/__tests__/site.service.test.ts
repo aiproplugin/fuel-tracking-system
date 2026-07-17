@@ -31,9 +31,9 @@ beforeEach(() => {
 
 describe("createSite", () => {
   it("creates and audits SITE_CREATED", async () => {
-    mockDb.site.create.mockResolvedValue({ id: "site-1", name: "Main Depot" });
+    mockDb.site.create.mockResolvedValue({ id: "site-1", name: "Main Depot", companyId: "co-1" });
 
-    const result = await createSite("admin-1", { name: "Main Depot" });
+    const result = await createSite("admin-1", { name: "Main Depot", companyId: "co-1" });
 
     expect(result).toEqual({ id: "site-1", name: "Main Depot" });
     const auditArg = mockDb.auditLog.create.mock.calls[0]?.[0] as { data: { action: string } };
@@ -43,7 +43,9 @@ describe("createSite", () => {
   it("maps a duplicate name (P2002) to a friendly CONFLICT", async () => {
     mockDb.site.create.mockRejectedValue(knownRequestError("P2002"));
 
-    await expect(createSite("admin-1", { name: "Main Depot" })).rejects.toMatchObject({
+    await expect(
+      createSite("admin-1", { name: "Main Depot", companyId: "co-1" }),
+    ).rejects.toMatchObject({
       code: "CONFLICT",
     });
     expect(mockDb.auditLog.create).not.toHaveBeenCalled();
@@ -52,13 +54,16 @@ describe("createSite", () => {
 
 describe("updateSite", () => {
   it("renames and audits SITE_UPDATED with before/after", async () => {
-    mockDb.site.findUnique.mockResolvedValue({ id: "site-1", name: "Old Name" });
+    mockDb.site.findUnique.mockResolvedValue({ id: "site-1", name: "Old Name", companyId: "co-1" });
     mockDb.site.update.mockResolvedValue({});
 
-    await updateSite("admin-1", { id: "site-1", name: "New Name" });
+    await updateSite("admin-1", { id: "site-1", name: "New Name", companyId: "co-1" });
 
     expect(mockDb.site.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "site-1" }, data: { name: "New Name" } }),
+      expect.objectContaining({
+        where: { id: "site-1" },
+        data: { name: "New Name", companyId: "co-1" },
+      }),
     );
     const auditArg = mockDb.auditLog.create.mock.calls[0]?.[0] as {
       data: { action: string; before: { name: string }; after: { name: string } };
@@ -70,18 +75,20 @@ describe("updateSite", () => {
 
   it("rejects unknown sites", async () => {
     mockDb.site.findUnique.mockResolvedValue(null);
-    await expect(updateSite("admin-1", { id: "ghost", name: "X" })).rejects.toMatchObject({
+    await expect(
+      updateSite("admin-1", { id: "ghost", name: "X", companyId: "co-1" }),
+    ).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
     expect(mockDb.site.update).not.toHaveBeenCalled();
   });
 
   it("maps a duplicate name (P2002) to a friendly CONFLICT", async () => {
-    mockDb.site.findUnique.mockResolvedValue({ id: "site-1", name: "Old Name" });
+    mockDb.site.findUnique.mockResolvedValue({ id: "site-1", name: "Old Name", companyId: "co-1" });
     mockDb.site.update.mockRejectedValue(knownRequestError("P2002"));
 
     await expect(
-      updateSite("admin-1", { id: "site-1", name: "Taken Name" }),
+      updateSite("admin-1", { id: "site-1", name: "Taken Name", companyId: "co-1" }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(mockDb.auditLog.create).not.toHaveBeenCalled();
   });

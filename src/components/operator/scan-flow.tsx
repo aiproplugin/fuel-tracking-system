@@ -9,8 +9,10 @@ import { IssueReceipt } from "@/components/operator/issue-receipt";
 import {
   FlaggedConfirmation,
   InsufficientStockScreen,
+  MeterBlockedScreen,
   MismatchScreen,
-  OdometerBlockedScreen,
+  QuotaBlockedScreen,
+  QuotaWarningScreen,
 } from "@/components/operator/blocked-screens";
 import { QrScanner } from "@/components/operator/qr-scanner";
 import { VehicleRecognizedCard } from "@/components/operator/vehicle-recognized-card";
@@ -22,6 +24,7 @@ type LookupResult = RouterOutputs["fuelIssues"]["lookupVehicle"];
 export type LookupFound = Extract<LookupResult, { found: true }>;
 type SubmitResult = RouterOutputs["fuelIssues"]["submit"];
 type Receipt = Extract<SubmitResult, { outcome: "SUCCESS" }>["receipt"];
+type QuotaInfo = Extract<SubmitResult, { outcome: "QUOTA_EXCEEDED" }>["quota"];
 
 type FlowState =
   | { step: "scan" }
@@ -30,13 +33,25 @@ type FlowState =
   | { step: "receipt"; receipt: Receipt }
   | { step: "mismatch"; lookup: LookupFound }
   | {
-      step: "odometerBlocked";
+      step: "meterBlocked";
       lookup: LookupFound;
-      attemptedOdometer: number;
-      previousOdometer: number;
+      attemptedReading: number;
+      previousReading: number;
       liters: number;
     }
   | { step: "insufficient"; lookup: LookupFound; availableLiters: number; requestedLiters: number }
+  | { step: "quotaBlocked"; lookup: LookupFound; quota: QuotaInfo; requestedLiters: number }
+  // Retains the same idempotency key + entry values so the code resubmission
+  // is the SAME logical submission, just now authorised.
+  | {
+      step: "quotaExceeded";
+      lookup: LookupFound;
+      idempotencyKey: string;
+      liters: number;
+      meterReading: number;
+      quota: QuotaInfo;
+      codeRejected: boolean;
+    }
   | { step: "flagged" };
 
 /**
@@ -74,7 +89,7 @@ export function ScanFlow() {
   const submitMutation = api.fuelIssues.submit.useMutation({
     onSuccess: (result, variables) => {
       setSubmitError(null);
-      if (state.step !== "form") return;
+      if (state.step !== "form" && state.step !== "quotaExceeded") return;
       const lookup = state.lookup;
       switch (result.outcome) {
         case "SUCCESS":
@@ -83,12 +98,12 @@ export function ScanFlow() {
         case "FUEL_TYPE_MISMATCH":
           setState({ step: "mismatch", lookup });
           break;
-        case "ODOMETER_BLOCKED":
+        case "METER_BLOCKED":
           setState({
-            step: "odometerBlocked",
+            step: "meterBlocked",
             lookup,
-            attemptedOdometer: result.attemptedOdometer,
-            previousOdometer: result.previousOdometer,
+            attemptedReading: result.attemptedReading,
+            previousReading: result.previousReading,
             liters: variables.liters,
           });
           break;
@@ -98,6 +113,25 @@ export function ScanFlow() {
             lookup,
             availableLiters: result.availableLiters,
             requestedLiters: result.requestedLiters,
+          });
+          break;
+        case "QUOTA_BLOCKED":
+          setState({
+            step: "quotaBlocked",
+            lookup,
+            quota: result.quota,
+            requestedLiters: result.requestedLiters,
+          });
+          break;
+        case "QUOTA_EXCEEDED":
+          setState({
+            step: "quotaExceeded",
+            lookup,
+            idempotencyKey: variables.idempotencyKey,
+            liters: variables.liters,
+            meterReading: variables.meterReading,
+            quota: result.quota,
+            codeRejected: result.codeRejected,
           });
           break;
       }
@@ -155,12 +189,12 @@ export function ScanFlow() {
           isSubmitting={submitMutation.isPending}
           serverError={submitError}
           onBack={backToScan}
-          onSubmit={(liters, odometer) =>
+          onSubmit={(liters, meterReading) =>
             submitMutation.mutate({
               vehicleId: state.lookup.vehicle.id,
               idempotencyKey: state.idempotencyKey,
               liters,
-              odometer,
+              meterReading,
             })
           }
         />
@@ -172,19 +206,20 @@ export function ScanFlow() {
     case "mismatch":
       return <MismatchScreen lookup={state.lookup} onScanAgain={backToScan} />;
 
-    case "odometerBlocked":
+    case "meterBlocked":
       return (
-        <OdometerBlockedScreen
+        <MeterBlockedScreen
           plateNumber={state.lookup.vehicle.plateNumber}
-          previousOdometer={state.previousOdometer}
-          attemptedOdometer={state.attemptedOdometer}
+          meterType={state.lookup.vehicle.meterType}
+          previousReading={state.previousReading}
+          attemptedReading={state.attemptedReading}
           isFlagging={flagMutation.isPending}
           errorMessage={submitError}
           onGoBack={() => openForm(state.lookup)}
           onFlag={() =>
             flagMutation.mutate({
               vehicleId: state.lookup.vehicle.id,
-              attemptedOdometer: state.attemptedOdometer,
+              attemptedReading: state.attemptedReading,
               liters: state.liters,
             })
           }
@@ -198,6 +233,38 @@ export function ScanFlow() {
           requestedLiters={state.requestedLiters}
           onAdjust={() => openForm(state.lookup)}
           onHome={() => router.push("/home")}
+        />
+      );
+
+    case "quotaBlocked":
+      return (
+        <QuotaBlockedScreen
+          plateNumber={state.lookup.vehicle.plateNumber}
+          quota={state.quota}
+          requestedLiters={state.requestedLiters}
+          onAdjust={() => openForm(state.lookup)}
+          onHome={() => router.push("/home")}
+        />
+      );
+
+    case "quotaExceeded":
+      return (
+        <QuotaWarningScreen
+          plateNumber={state.lookup.vehicle.plateNumber}
+          quota={state.quota}
+          requestedLiters={state.liters}
+          codeRejected={state.codeRejected}
+          isSubmitting={submitMutation.isPending}
+          onSubmitWithCode={(code) =>
+            submitMutation.mutate({
+              vehicleId: state.lookup.vehicle.id,
+              idempotencyKey: state.idempotencyKey,
+              liters: state.liters,
+              meterReading: state.meterReading,
+              overrideCode: code,
+            })
+          }
+          onAdjust={() => openForm(state.lookup)}
         />
       );
 

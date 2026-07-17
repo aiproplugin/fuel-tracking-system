@@ -1,8 +1,8 @@
 import {
-  flagOdometerExceptionSchema,
+  flagMeterExceptionSchema,
   fuelIssueListSchema,
   lookupVehicleSchema,
-  reviewOdometerExceptionSchema,
+  reviewMeterExceptionSchema,
   submitFuelIssueSchema,
 } from "@/lib/schemas/fuel-issue";
 import {
@@ -12,19 +12,19 @@ import {
   supervisorProcedure,
 } from "@/server/api/trpc";
 import {
-  flagOdometerException,
+  flagMeterException,
   getOperatorDay,
   listFuelIssues,
-  listOdometerExceptions,
+  listMeterExceptions,
   lookupVehicleForIssue,
-  reviewOdometerException,
+  reviewMeterException,
   submitFuelIssue,
 } from "@/server/services/fuel-issue.service";
 
 /**
  * Fuel entry core. Operator procedures take the tank from the SESSION —
  * there is no tank input anywhere in this router. Review authority is
- * ADMIN-only per the odometer rule.
+ * ADMIN-only per the meter rule.
  */
 export const fuelIssuesRouter = createTRPCRouter({
   // Mutations (not queries) so react-query never caches or auto-retries them.
@@ -37,8 +37,8 @@ export const fuelIssuesRouter = createTRPCRouter({
     .mutation(({ ctx, input }) => submitFuelIssue(ctx.session.user, input)),
 
   flagException: operatorProcedure
-    .input(flagOdometerExceptionSchema)
-    .mutation(({ ctx, input }) => flagOdometerException(ctx.session.user, input)),
+    .input(flagMeterExceptionSchema)
+    .mutation(({ ctx, input }) => flagMeterException(ctx.session.user, input)),
 
   myDay: operatorProcedure.query(({ ctx }) => getOperatorDay(ctx.session.user)),
 
@@ -46,9 +46,9 @@ export const fuelIssuesRouter = createTRPCRouter({
     .input(fuelIssueListSchema)
     .query(({ ctx, input }) => listFuelIssues(ctx.session.user, input)),
 
-  exceptions: supervisorProcedure.query(({ ctx }) => listOdometerExceptions(ctx.session.user)),
+  exceptions: supervisorProcedure.query(({ ctx }) => listMeterExceptions(ctx.session.user)),
 
   reviewException: adminProcedure
-    .input(reviewOdometerExceptionSchema)
-    .mutation(({ ctx, input }) => reviewOdometerException(ctx.session.user.id, input)),
+    .input(reviewMeterExceptionSchema)
+    .mutation(({ ctx, input }) => reviewMeterException(ctx.session.user.id, input)),
 });

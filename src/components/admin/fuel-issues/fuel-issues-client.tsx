@@ -18,11 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime, formatKilometers, formatLiters } from "@/lib/format";
+import { formatDateTime, formatLiters } from "@/lib/format";
+import { formatEfficiency, formatMeter } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
 /**
- * Fuel Issues register + odometer exception queue (D6). Supervisors see
+ * Fuel Issues register + meter exception queue (D6). Supervisors see
  * their site read-only; only ADMIN gets the Review action.
  */
 export function FuelIssuesClient() {
@@ -68,8 +69,8 @@ export function FuelIssuesClient() {
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold">
                     {exception.plateNumber} · attempted{" "}
-                    {formatKilometers(exception.attemptedOdometer)} (last{" "}
-                    {formatKilometers(exception.previousOdometer)})
+                    {formatMeter(exception.attemptedReading, exception.meterType)} (last{" "}
+                    {formatMeter(exception.previousReading, exception.meterType)})
                   </p>
                   <p className="text-muted">
                     {formatLiters(exception.liters)} · {exception.tankName} ·{" "}
@@ -99,8 +100,8 @@ export function FuelIssuesClient() {
               <TableHead>Tank</TableHead>
               <TableHead>Operator</TableHead>
               <TableHead>Liters</TableHead>
-              <TableHead>Odometer</TableHead>
-              <TableHead>km/L</TableHead>
+              <TableHead>Meter</TableHead>
+              <TableHead>Efficiency</TableHead>
               <TableHead>Status</TableHead>
             </tr>
           </TableHeader>
@@ -125,15 +126,17 @@ export function FuelIssuesClient() {
                   <TableCell>{issue.tankName}</TableCell>
                   <TableCell className="text-muted">{issue.operatorName}</TableCell>
                   <TableCell className="font-semibold">{issue.liters.toFixed(1)}</TableCell>
-                  <TableCell>{formatKilometers(issue.odometer)}</TableCell>
+                  <TableCell>{formatMeter(issue.meterReading, issue.meterType)}</TableCell>
                   <TableCell>
-                    {issue.kmPerLiter !== null ? issue.kmPerLiter.toFixed(2) : "—"}
+                    {issue.efficiency !== null
+                      ? formatEfficiency(issue.efficiency, issue.meterType)
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <span className="flex flex-wrap gap-1.5">
                       {issue.isAbnormal ? <Badge variant="warning">Abnormal</Badge> : null}
-                      {issue.odometerOverride ? <Badge variant="info">Override</Badge> : null}
-                      {!issue.isAbnormal && !issue.odometerOverride ? (
+                      {issue.meterOverride ? <Badge variant="info">Override</Badge> : null}
+                      {!issue.isAbnormal && !issue.meterOverride ? (
                         <Badge variant="success">Issued</Badge>
                       ) : null}
                     </span>

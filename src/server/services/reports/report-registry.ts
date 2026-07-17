@@ -33,7 +33,7 @@ export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
   "vehicle-monthly": {
     key: "vehicle-monthly",
     title: "Per-vehicle monthly summary",
-    description: "Liters, distance, and km/L per vehicle per calendar month.",
+    description: "Liters, meter delta, and efficiency per vehicle per calendar month.",
     xlsx: true,
     requiresFlag: false,
     timeFiltered: true,
@@ -42,7 +42,7 @@ export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
   "vehicle-efficiency": {
     key: "vehicle-efficiency",
     title: "Per-vehicle efficiency",
-    description: "Fleet efficiency ranking with per-vehicle drill-down.",
+    description: "Efficiency ranking per meter type with per-vehicle drill-down.",
     xlsx: true,
     requiresFlag: false,
     timeFiltered: true,
@@ -69,7 +69,7 @@ export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
   "abnormal-consumption": {
     key: "abnormal-consumption",
     title: "Abnormal consumption",
-    description: "Transactions flagged outside their vehicle type's km/L band.",
+    description: "Transactions flagged outside their vehicle type's efficiency band.",
     xlsx: false,
     requiresFlag: false,
     timeFiltered: true,

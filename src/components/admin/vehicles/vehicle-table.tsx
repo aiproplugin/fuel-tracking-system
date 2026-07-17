@@ -18,14 +18,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatKilometers } from "@/lib/format";
+import { formatMeter, type MeterTypeName } from "@/lib/meter";
 
 export interface VehicleRow {
   id: string;
   plateNumber: string;
-  vehicleType: { id: string; name: string };
+  vehicleType: { id: string; name: string; meterType: MeterTypeName };
+  meterType: MeterTypeName;
+  company: { id: string; name: string };
   fuelType: "PETROL" | "DIESEL";
-  currentOdometer: number;
+  currentMeter: number;
+  quotaMode: "INHERIT" | "CUSTOM" | "EXEMPT";
   isActive: boolean;
   hasActiveQrToken: boolean;
 }
@@ -45,6 +48,7 @@ export function VehicleTable({ vehicles, isLoading, canEdit, onEdit }: VehicleTa
       header: "Plate",
       cell: (info) => <span className="font-semibold">{info.getValue()}</span>,
     }),
+    columnHelper.accessor((row) => row.company.name, { id: "company", header: "Company" }),
     columnHelper.accessor((row) => row.vehicleType.name, { id: "type", header: "Type" }),
     columnHelper.accessor("fuelType", {
       header: "Fuel",
@@ -54,9 +58,9 @@ export function VehicleTable({ vehicles, isLoading, canEdit, onEdit }: VehicleTa
         </Badge>
       ),
     }),
-    columnHelper.accessor("currentOdometer", {
-      header: "Odometer",
-      cell: (info) => formatKilometers(info.getValue()),
+    columnHelper.accessor("currentMeter", {
+      header: "Meter",
+      cell: (info) => formatMeter(info.getValue(), info.row.original.meterType),
     }),
     columnHelper.accessor("hasActiveQrToken", {
       header: "QR token",

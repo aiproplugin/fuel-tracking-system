@@ -3,18 +3,21 @@
 import { CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, formatKilometers, formatLiters } from "@/lib/format";
+import { formatDateTime, formatLiters } from "@/lib/format";
+import { METER_CONFIG, formatEfficiencyFull, formatMeter, type MeterTypeName } from "@/lib/meter";
 
 /**
  * Success receipt (implied screen, prototype design language): the ledger
- * confirmation the operator sees after a recorded issue.
+ * confirmation the operator sees after a recorded issue. Meter and
+ * efficiency lines follow the vehicle's meter type (km / hrs / kWh).
  */
 export interface IssueReceiptData {
   transactionId: string;
   plateNumber: string;
+  meterType: MeterTypeName;
   liters: number;
-  odometer: number;
-  kmPerLiter: number | null;
+  meterReading: number;
+  efficiency: number | null;
   isAbnormal: boolean;
   tankName: string;
   balanceAfterLiters: number;
@@ -42,8 +45,10 @@ export function IssueReceipt({
 
       <div className="space-y-2 rounded-[24px] border border-border bg-slate-50 p-4 text-sm">
         <div className="flex justify-between">
-          <span>Odometer recorded</span>
-          <span className="font-semibold">{formatKilometers(receipt.odometer)}</span>
+          <span>{METER_CONFIG[receipt.meterType].meterLabel} recorded</span>
+          <span className="font-semibold">
+            {formatMeter(receipt.meterReading, receipt.meterType)}
+          </span>
         </div>
         <div className="flex justify-between">
           <span>Tank</span>
@@ -56,8 +61,8 @@ export function IssueReceipt({
         <div className="flex justify-between">
           <span>Efficiency</span>
           <span className="font-semibold">
-            {receipt.kmPerLiter !== null
-              ? `${receipt.kmPerLiter.toFixed(2)} km/L`
+            {receipt.efficiency !== null
+              ? formatEfficiencyFull(receipt.efficiency, receipt.meterType)
               : "Calculates after next fill"}
           </span>
         </div>

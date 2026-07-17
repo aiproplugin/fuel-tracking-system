@@ -29,13 +29,24 @@ Every fuel-quantity change runs through the service layer inside ONE atomic Pris
   A fuel issue is HARD-BLOCKED if `vehicle.fuelType != tank.fuelType` (red mismatch screen).
 - **TANK BINDING**: each operator user has `default_tank_id`, bound to session on login. Operator
   never selects a tank. Only ADMIN can assign/reassign an operator's tank.
-- **ODOMETER**: must be >= vehicle's last recorded odometer. If lower, BLOCK submission. Only
-  ADMIN may authorize an override (`odometer_override=true`, reason required, audit-logged).
-  Supervisor and Manager CANNOT override. Operator can only "flag for admin review".
-- **EFFICIENCY**: `km_per_liter = (odometer_now - odometer_previous) / liters_at_previous_fill`.
-  First fill has no efficiency (no baseline) — expected, not an error.
-- **ABNORMAL CONSUMPTION**: configurable min/max km/L bounds PER VEHICLE TYPE, in settings. Flag
-  a transaction whose km/L falls outside its band (too low or too high).
+- **USAGE METER**: every vehicle/asset has ONE monotonically-increasing usage meter whose kind is
+  set on the VEHICLE TYPE via `MeterType { DISTANCE (km), HOURS (hrs), ENERGY (kWh) }` — vehicles
+  inherit it, there is NO per-vehicle meter type. All unit strings/labels/formatting live ONLY in
+  `src/lib/meter.ts` (`METER_CONFIG`); adding a meter type = one enum value + one config entry.
+  The meter type is editable in Settings only until vehicles of the type have recorded history.
+- **METER READING**: must be >= vehicle's last recorded reading (identical rule for km, hrs, and
+  kWh). If lower, BLOCK submission. Only ADMIN may authorize an override (`meter_override=true`,
+  reason required, audit-logged). Supervisor and Manager CANNOT override. Operator can only
+  "flag for admin review".
+- **EFFICIENCY**: `efficiency = (reading_now - reading_previous) / liters_at_previous_fill` —
+  ALWAYS output per litre (km/L, hrs/L, kWh/L; higher is better), ONE code path for all meter
+  types. First fill has no efficiency (no baseline) — expected, not an error. The inverse form
+  (L/hr, L/kWh) is display-only, never stored.
+- **ABNORMAL CONSUMPTION**: configurable min/max efficiency bounds PER VEHICLE TYPE (in the
+  type's own unit per litre), in settings. Flag a transaction whose efficiency falls outside its
+  band (too low or too high).
+- **AGGREGATES**: never mix meter types in one figure — fleet efficiency and meter-delta totals
+  are computed/reported PER meter type; only litres may total across the whole fleet.
 - **IDEMPOTENCY**: every fuel submission carries a client-generated idempotency key; dedupe and
   return the original transaction on retry/double-tap.
 - **QR TOKENS**: opaque random UUID-based string in its own `qr_token` table (never the plate,
@@ -63,7 +74,7 @@ manager/admin=all. Override authority: ADMIN only. Adjustments: SUPERVISOR or AD
 - **Authorization**: server-side role + ownership checks on every mutation and query. No
   privilege escalation via IDs — always verify the actor may act on the target resource.
 - **Input validation**: shared Zod schemas validate ALL input on the server (client validation is
-  UX only). Reject unknown fields. Validate numeric ranges (liters>0, odometer sane).
+  UX only). Reject unknown fields. Validate numeric ranges (liters>0, meter reading sane).
 - **Injection safety**: only parameterized Prisma queries; no raw string SQL. Escape/encode all
   output; React auto-escaping preserved (no `dangerouslySetInnerHTML` with user data).
 - **CSRF**: tRPC mutations protected; Auth.js CSRF enabled. Set security headers via middleware:
@@ -97,15 +108,17 @@ context cards for "assigned tank"; mobile = one primary action per 390-wide scre
 
 Reusable components (atoms/molecules/organisms) matching the prototype: Button (Primary/
 Secondary), Input, Badge/FuelType, StatusIcon, Avatar, KpiCard, VehicleLookupCard,
-AuditEventRow, TankContextHeader, OdometerBlockedBanner, QRScannerModal, plus the screens.
+AuditEventRow, TankContextHeader, MeterBlockedBanner, QRScannerModal, plus the screens.
 
 Prototype screens to reproduce: M1 Login, M2 Operator Home, M3 QR Scanner, M4 Vehicle
-Recognized, M5 Fuel Issue Form, M6 Odometer Blocked, M7 Fuel Type Mismatch, D1 Admin Dashboard,
-D3 Tank Detail, D6 Odometer Exception Review, and the admin shell nav (Dashboard, Fuel Issues,
+Recognized, M5 Fuel Issue Form, M6 Meter Blocked (drawn as "Odometer Blocked" in the prototype —
+same screen, meter-type-aware labels), M7 Fuel Type Mismatch, D1 Admin Dashboard, D3 Tank
+Detail, D6 Meter Exception Review, and the admin shell nav (Dashboard, Fuel Issues,
 Deliveries, Adjustments, Vehicles, Tanks, Users, QR Tokens, Audit, Settings). Screens implied
 but not drawn (design in the SAME language): success receipt, delivery entry, adjustment flag,
 list views, CRUD forms, Users + tank assignment, QR token generate/print/rotate, audit trail,
-settings (per-vehicle-type km/L bounds), per-vehicle efficiency report with drill-down.
+settings (per-vehicle-type meter type + efficiency bounds), per-vehicle efficiency report with
+drill-down.
 
 ## Code quality
 

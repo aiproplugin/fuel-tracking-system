@@ -10,6 +10,7 @@ import {
 
 const SITE_ID = "3f0a72c1-58cc-4e7a-9d21-0a2f6f5f9b11";
 const TYPE_ID = "9b8d1e42-77aa-4f4e-8c53-2f1e9d3c4a55";
+const COMPANY_ID = "5c1b83d2-66bb-4a3f-9d64-3a2f8e4b5c66";
 
 describe("plateNumberSchema", () => {
   it("uppercases and accepts valid plates", () => {
@@ -51,29 +52,69 @@ describe("createTankSchema", () => {
 describe("upsertVehicleTypeSchema", () => {
   it("rejects min >= max", () => {
     expect(
-      upsertVehicleTypeSchema.safeParse({ name: "Lorry", minKmPerLiter: 8, maxKmPerLiter: 8 })
-        .success,
+      upsertVehicleTypeSchema.safeParse({
+        name: "Lorry",
+        meterType: "DISTANCE",
+        minEfficiency: 8,
+        maxEfficiency: 8,
+      }).success,
     ).toBe(false);
   });
 
-  it("accepts a valid band", () => {
+  it("accepts a valid band for each meter type", () => {
     expect(
-      upsertVehicleTypeSchema.safeParse({ name: "Lorry", minKmPerLiter: 3, maxKmPerLiter: 8 })
-        .success,
+      upsertVehicleTypeSchema.safeParse({
+        name: "Lorry",
+        meterType: "DISTANCE",
+        minEfficiency: 3,
+        maxEfficiency: 8,
+      }).success,
     ).toBe(true);
+    expect(
+      upsertVehicleTypeSchema.safeParse({
+        name: "Forklift",
+        meterType: "HOURS",
+        minEfficiency: 0.8,
+        maxEfficiency: 2.5,
+      }).success,
+    ).toBe(true);
+    expect(
+      upsertVehicleTypeSchema.safeParse({
+        name: "Generator",
+        meterType: "ENERGY",
+        minEfficiency: 2.5,
+        maxEfficiency: 4,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires a known meter type", () => {
+    expect(
+      upsertVehicleTypeSchema.safeParse({
+        name: "Lorry",
+        meterType: "FURLONGS",
+        minEfficiency: 3,
+        maxEfficiency: 8,
+      }).success,
+    ).toBe(false);
+    expect(
+      upsertVehicleTypeSchema.safeParse({ name: "Lorry", minEfficiency: 3, maxEfficiency: 8 })
+        .success,
+    ).toBe(false);
   });
 });
 
 describe("createVehicleSchema", () => {
-  it("rejects negative odometers and unknown fields", () => {
+  it("rejects negative meter readings and unknown fields", () => {
     const valid = {
       plateNumber: "KX-1000",
       vehicleTypeId: TYPE_ID,
+      companyId: COMPANY_ID,
       fuelType: "PETROL" as const,
-      currentOdometer: 1000,
+      currentMeter: 1000,
     };
     expect(createVehicleSchema.safeParse(valid).success).toBe(true);
-    expect(createVehicleSchema.safeParse({ ...valid, currentOdometer: -1 }).success).toBe(false);
+    expect(createVehicleSchema.safeParse({ ...valid, currentMeter: -1 }).success).toBe(false);
     expect(createVehicleSchema.safeParse({ ...valid, injected: true }).success).toBe(false);
   });
 });

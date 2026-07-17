@@ -11,17 +11,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime, formatKilometers, formatLiters } from "@/lib/format";
+import { formatDateTime, formatLiters } from "@/lib/format";
+import { METER_CONFIG, formatEfficiencyFull, formatMeter } from "@/lib/meter";
 import type { VehicleEfficiencyDetail } from "@/server/services/reports/report.service";
 
 /**
  * D-level drill-down: one vehicle's fill-by-fill efficiency history. Server
  * component fed by the scoped service, so a supervisor only ever sees fills
- * from their own site's tanks.
+ * from their own site's tanks. Units follow the vehicle's meter type
+ * (km / hrs / kWh) — a single vehicle has exactly one.
  */
 export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficiencyDetail }) {
   const { vehicle, totals, fills } = detail;
   const fuelVariant = vehicle.fuelType === "PETROL" ? "petrol" : "diesel";
+  const meter = METER_CONFIG[vehicle.meterType];
 
   return (
     <div className="space-y-6">
@@ -35,17 +38,21 @@ export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficie
           actions={<Badge variant={fuelVariant}>{vehicle.fuelType}</Badge>}
         />
         <p className="text-sm text-muted">
-          {vehicle.vehicleType} · current odometer {formatKilometers(vehicle.currentOdometer)}
+          {vehicle.vehicleType} · current {meter.meterLabel.toLowerCase()}{" "}
+          {formatMeter(vehicle.currentMeter, vehicle.meterType)}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard label="Fills" value={totals.fills.toLocaleString("en-US")} />
         <KpiCard label="Total liters" value={formatLiters(totals.liters)} />
-        <KpiCard label="Distance" value={formatKilometers(totals.km)} />
         <KpiCard
-          label="Overall km/L"
-          value={totals.kmPerLiter !== null ? totals.kmPerLiter.toFixed(2) : "—"}
+          label={meter.deltaLabel}
+          value={formatMeter(totals.meterDelta, vehicle.meterType)}
+        />
+        <KpiCard
+          label={`Overall ${meter.efficiencyUnit}`}
+          value={totals.efficiency !== null ? totals.efficiency.toFixed(2) : "—"}
         />
       </div>
 
@@ -56,9 +63,9 @@ export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficie
               <TableHead>Issued at</TableHead>
               <TableHead>Tank</TableHead>
               <TableHead className="text-right">Liters</TableHead>
-              <TableHead className="text-right">Odometer</TableHead>
-              <TableHead className="text-right">Distance</TableHead>
-              <TableHead className="text-right">km/L</TableHead>
+              <TableHead className="text-right">{meter.meterLabel}</TableHead>
+              <TableHead className="text-right">{meter.deltaLabel}</TableHead>
+              <TableHead className="text-right">Efficiency</TableHead>
               <TableHead>Status</TableHead>
             </tr>
           </TableHeader>
@@ -74,15 +81,19 @@ export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficie
                 <TableRow key={index}>
                   <TableCell className="text-muted">{formatDateTime(fill.issuedAt)}</TableCell>
                   <TableCell>{fill.tank}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fill.liters.toFixed(1)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatKilometers(fill.odometer)}
+                    {fill.liters.toFixed(1)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatKilometers(fill.distanceKm)}
+                    {formatMeter(fill.meterReading, vehicle.meterType)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {fill.kmPerLiter !== null ? fill.kmPerLiter.toFixed(2) : "—"}
+                    {formatMeter(fill.meterDelta, vehicle.meterType)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {fill.efficiency !== null
+                      ? formatEfficiencyFull(fill.efficiency, vehicle.meterType)
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     {fill.isAbnormal ? (

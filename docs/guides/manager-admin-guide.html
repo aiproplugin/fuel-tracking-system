@@ -164,7 +164,7 @@
           <tr><td>See the dashboard &amp; reports</td><td>—</td><td>Own site</td><td>All sites</td><td>All sites</td></tr>
           <tr><td>Record deliveries</td><td>—</td><td>Own site</td><td><span class="chip no">Read only</span></td><td><span class="chip ok">Yes</span></td></tr>
           <tr><td>Record adjustments</td><td>—</td><td>Own site</td><td><span class="chip no">Read only</span></td><td><span class="chip ok">Yes</span></td></tr>
-          <tr><td>Approve odometer overrides</td><td>Flag only</td><td>—</td><td>—</td><td><span class="chip ok">Yes</span></td></tr>
+          <tr><td>Approve meter-reading overrides</td><td>Flag only</td><td>—</td><td>—</td><td><span class="chip ok">Yes</span></td></tr>
           <tr><td>Manage users &amp; assign tanks</td><td>—</td><td>—</td><td>—</td><td><span class="chip ok">Yes</span></td></tr>
           <tr><td>QR tokens &amp; settings</td><td>—</td><td>—</td><td>—</td><td><span class="chip ok">Yes</span></td></tr>
           <tr><td>View the audit trail</td><td>—</td><td>—</td><td><span class="chip ok">Yes</span></td><td><span class="chip ok">Yes</span></td></tr>
@@ -190,7 +190,7 @@
         <div class="tablewrap"><table>
           <tr><th>Menu item</th><th>What it's for</th><th>Who sees it</th></tr>
           <tr><td>Dashboard</td><td>KPIs, alerts, recent activity</td><td>Supervisor +</td></tr>
-          <tr><td>Fuel Issues</td><td>Every recorded issue; odometer exception review</td><td>Supervisor +</td></tr>
+          <tr><td>Fuel Issues</td><td>Every recorded issue; meter exception review</td><td>Supervisor +</td></tr>
           <tr><td>Deliveries</td><td>Fuel received into tanks</td><td>Supervisor + (manager read-only)</td></tr>
           <tr><td>Adjustments</td><td>Stock corrections</td><td>Supervisor + (manager read-only)</td></tr>
           <tr><td>Vehicles</td><td>Vehicle register</td><td>Supervisor +</td></tr>
@@ -199,7 +199,7 @@
           <tr><td>Users</td><td>Accounts, roles, tank binding</td><td>Admin</td></tr>
           <tr><td>QR Tokens</td><td>Generate / print / rotate tokens</td><td>Admin</td></tr>
           <tr><td>Audit</td><td>Append-only activity log</td><td>Manager, Admin</td></tr>
-          <tr><td>Settings</td><td>Per-vehicle-type km/L bands</td><td>Admin</td></tr>
+          <tr><td>Settings</td><td>Per-vehicle-type meter type + efficiency bands</td><td>Admin</td></tr>
         </table></div>
         <p>Your name, username, and role show at the bottom of the sidebar, with a
           <span class="field">Sign out</span> button.</p>
@@ -221,21 +221,21 @@
           <div class="k"><div class="lab">Petrol stock</div><div class="val">—</div></div>
           <div class="k"><div class="lab">Diesel stock</div><div class="val">—</div></div>
           <div class="k warn"><div class="lab">Low-stock tanks</div><div class="val">0</div></div>
-          <div class="k danger"><div class="lab">Odometer exceptions</div><div class="val">0</div></div>
+          <div class="k danger"><div class="lab">Meter exceptions</div><div class="val">0</div></div>
           <div class="k info"><div class="lab">Abnormal consumption</div><div class="val">0</div></div>
         </div>
         <ul>
           <li><strong>Fuel issued</strong> — total litres dispensed in the selected range.</li>
           <li><strong>Petrol / Diesel stock</strong> — current recorded stock across your tanks.</li>
           <li><strong>Low-stock tanks</strong> — turns amber when any tank is below its threshold. Time a delivery.</li>
-          <li><strong>Odometer exceptions</strong> — turns red when operators have flagged readings waiting for your approval. Clear these promptly (see <a href="#exceptions">Fuel issues &amp; overrides</a>).</li>
-          <li><strong>Abnormal consumption</strong> — fills flagged for unusual km/L; worth a look but not urgent.</li>
+          <li><strong>Meter exceptions</strong> — turns red when operators have flagged readings waiting for your approval. Clear these promptly (see <a href="#exceptions">Fuel issues &amp; overrides</a>).</li>
+          <li><strong>Abnormal consumption</strong> — fills flagged for unusual efficiency (km/L, hrs/L, or kWh/L); worth a look but not urgent.</li>
         </ul>
 
         <h2>Below the KPIs</h2>
         <ul>
           <li><strong>Daily litres chart</strong> — the trend over the range.</li>
-          <li><strong>Exception queue</strong> — the flagged odometer readings needing review.</li>
+          <li><strong>Exception queue</strong> — the flagged meter readings needing review.</li>
           <li><strong>Recent transactions</strong> — the latest fuel issues.</li>
           <li><strong>Reconciliation status</strong> — whether the ledger and cached tank stock agree (see <a href="#reconcile">Reconciliation</a>).</li>
         </ul>
@@ -246,10 +246,11 @@
       <!-- EXCEPTIONS -->
       <section class="doc" id="exceptions">
         <p class="eyebrow">Admin only</p>
-        <h1>Fuel issues &amp; odometer overrides</h1>
+        <h1>Fuel issues &amp; meter overrides</h1>
         <p>The <strong>Fuel Issues</strong> page lists every recorded issue. Its most important job
-          is the <strong>odometer exception review</strong> — approving or rejecting readings an
-          operator flagged because they were lower than the vehicle's last record.</p>
+          is the <strong>meter exception review</strong> — approving or rejecting readings an
+          operator flagged because they were lower than the vehicle's last record. The same rule
+          covers every meter kind: odometer (km), hour meter (hrs), and energy meter (kWh).</p>
 
         <div class="callout warn">
           <span class="k">Only an administrator can do this</span>
@@ -259,9 +260,9 @@
 
         <h3>Reviewing an exception</h3>
         <ol class="steps">
-          <li><span class="st">Open the flagged item</span> The dialog shows the vehicle, the previous odometer, what the operator attempted, the litres, the operator, and the tank.</li>
-          <li><span class="st">Verify the real reading</span> Confirm the true odometer — ideally from a meter photo or a call to the operator.</li>
-          <li><span class="st">To approve</span> Enter the <strong>corrected odometer</strong> (must be at least the vehicle's current reading), type a <strong>reason</strong> (5+ characters, required), and tap <span class="btnpill dark">Approve corrected entry</span>. This records the fuel issue with the corrected reading as an audited override.</li>
+          <li><span class="st">Open the flagged item</span> The dialog shows the vehicle, the previous reading, what the operator attempted (in the vehicle's own unit), the litres, the operator, and the tank.</li>
+          <li><span class="st">Verify the real reading</span> Confirm the true meter reading — ideally from a meter photo or a call to the operator.</li>
+          <li><span class="st">To approve</span> Enter the <strong>corrected reading</strong> (must be at least the vehicle's current reading), type a <strong>reason</strong> (5+ characters, required), and tap <span class="btnpill dark">Approve corrected entry</span>. This records the fuel issue with the corrected reading as an audited override.</li>
           <li><span class="st">To reject</span> Type a reason and tap <span class="field">Reject</span>. Nothing is written to the ledger; the decision is logged.</li>
         </ol>
         <div class="callout info">
@@ -270,7 +271,7 @@
           values. The operator does not need to resubmit — approval records the issue for them.
         </div>
         <div class="shot"><span class="cam">📷</span><span class="lbl">Screenshot placeholder</span>
-          <div class="cap">The exception review dialog with the vehicle summary, corrected-odometer field, and reason box.</div></div>
+          <div class="cap">The exception review dialog with the vehicle summary, corrected-reading field, and reason box.</div></div>
       </section>
 
       <!-- DELIVERIES -->
@@ -347,22 +348,32 @@
           current stock. Stock shown here is the cached value that always equals the latest ledger
           movement (see <a href="#reconcile">Reconciliation</a>).</p>
 
-        <h2>Vehicle types &amp; the abnormal-consumption band (Settings)</h2>
-        <p>Under <strong>Settings</strong> (admin only) you set, per vehicle type, the expected
-          <strong>minimum and maximum km/L</strong>. Any fuel issue whose efficiency falls outside
-          its type's band is flagged as <strong>abnormal consumption</strong>.</p>
+        <h2>Vehicle types, meter types &amp; the abnormal-consumption band (Settings)</h2>
+        <p>Under <strong>Settings</strong> (admin only) you set, per vehicle type, the
+          <strong>meter type</strong> — odometer (km) for road vehicles, hour meter (hrs) for
+          machines like forklifts, or energy meter (kWh) for generators — and the expected
+          <strong>minimum and maximum efficiency</strong> in that type's own unit per litre
+          (e.g. 6–20 km/L for a car, 0.8–2.5 hrs/L for a forklift, 2.5–4.0 kWh/L for a
+          generator). Any fuel issue whose efficiency falls outside its type's band is flagged as
+          <strong>abnormal consumption</strong>.</p>
         <ol class="steps">
-          <li><span class="st">Add or edit a vehicle type</span> Give it a name.</li>
-          <li><span class="st">Set Min km/L and Max km/L</span> Minimum must be below maximum.</li>
+          <li><span class="st">Add or edit a vehicle type</span> Give it a name and pick its meter type.</li>
+          <li><span class="st">Set the Min and Max band</span> Minimum must be below maximum, in the meter type's efficiency unit.</li>
           <li><span class="st">Save band</span> Changes are audit-logged with before/after values.</li>
         </ol>
+        <div class="callout warn">
+          <span class="k">The meter type locks with history</span>
+          Once vehicles of a type have recorded fuel issues, its meter type can no longer be
+          changed — the stored readings would become meaningless. Create a new vehicle type
+          instead.
+        </div>
         <div class="callout tip">
           <span class="k">Tuning the band</span>
           If you get too many false abnormal flags, widen the band; if genuinely wasteful fills slip
           through, tighten it. Base the numbers on each type's real-world economy.
         </div>
         <div class="shot"><span class="cam">📷</span><span class="lbl">Screenshot placeholder</span>
-          <div class="cap">Settings — the vehicle-type table with Min/Max km/L and the edit form.</div></div>
+          <div class="cap">Settings — the vehicle-type table with meter type, efficiency band, and the edit form.</div></div>
       </section>
 
       <!-- USERS -->
@@ -453,7 +464,9 @@
 
         <h3>Efficiency drill-down</h3>
         <p>In the <strong>vehicle efficiency</strong> report, each row is a link — click a vehicle to
-          open its detailed history: fill-by-fill km/L, distances, and flagged abnormal fills.</p>
+          open its detailed history: fill-by-fill efficiency in the vehicle's own unit, meter
+          deltas, and flagged abnormal fills. Fleet-level efficiency figures are shown per meter
+          type — km/L, hrs/L, and kWh/L are never averaged together.</p>
 
         <div class="callout warn">
           <span class="k">Large results are trimmed on screen</span>
@@ -474,10 +487,10 @@
         <p>It captures, newest first:</p>
         <ul>
           <li>Sign-ins and account lockouts.</li>
-          <li>Odometer overrides and exception decisions (with the reason and before/after).</li>
+          <li>Meter-reading overrides and exception decisions (with the reason and before/after).</li>
           <li>Deliveries and adjustments.</li>
           <li>Role changes, tank assignments, and password resets.</li>
-          <li>Setting changes (e.g. km/L bands), with before/after values.</li>
+          <li>Setting changes (e.g. meter types and efficiency bands), with before/after values.</li>
         </ul>
         <p>Scroll and tap <span class="field">Load older events</span> to page back through history.</p>
         <div class="callout danger">

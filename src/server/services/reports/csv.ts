@@ -1,4 +1,4 @@
-import { formatReportCell } from "@/lib/reports/format-cell";
+import { formatReportCell, rowMeterType } from "@/lib/reports/format-cell";
 import type { ReportResult } from "@/server/services/reports/report-types";
 
 /**
@@ -14,7 +14,10 @@ const FORMULA_TRIGGERS = new Set(["=", "+", "-", "@"]);
 function escapeField(raw: string): string {
   // Leading chars Excel/Sheets would treat as a formula — prefix with a quote.
   let value = raw;
-  if (value.length > 0 && (FORMULA_TRIGGERS.has(value[0]!) || value[0] === "\t" || value[0] === "\r")) {
+  if (
+    value.length > 0 &&
+    (FORMULA_TRIGGERS.has(value[0]!) || value[0] === "\t" || value[0] === "\r")
+  ) {
     value = `'${value}`;
   }
   if (/[",\r\n]/.test(value)) {
@@ -26,7 +29,11 @@ function escapeField(raw: string): string {
 export function reportToCsv(result: ReportResult): string {
   const header = result.columns.map((column) => escapeField(column.label)).join(",");
   const lines = result.rows.map((row) =>
-    result.columns.map((column) => escapeField(formatReportCell(row[column.key] ?? null, column.type))).join(","),
+    result.columns
+      .map((column) =>
+        escapeField(formatReportCell(row[column.key] ?? null, column.type, rowMeterType(row))),
+      )
+      .join(","),
   );
   const body = [header, ...lines].join("\r\n");
   return `﻿${body}\r\n`;

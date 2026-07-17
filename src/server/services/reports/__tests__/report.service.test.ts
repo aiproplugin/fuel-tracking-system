@@ -64,34 +64,99 @@ describe("runReport — ledger-sourced totals", () => {
   });
 });
 
+function fill(overrides: Record<string, unknown>) {
+  return {
+    vehicleId: "v1",
+    issuedAt: new Date("2026-07-03T05:00:00.000Z"),
+    liters: new Prisma.Decimal("50.00"),
+    meterReading: 1000,
+    previousMeterReading: 900,
+    efficiency: null,
+    isAbnormal: false,
+    vehicle: { plateNumber: "CAB-1", vehicleType: { name: "Truck", meterType: "DISTANCE" } },
+    ...overrides,
+  };
+}
+
+/** One DISTANCE truck + one HOURS forklift + one ENERGY generator in scope. */
+function mixedFleetFills() {
+  return [
+    fill({ meterReading: 1000, previousMeterReading: 900 }), // truck: 100 km / 50 L
+    fill({ meterReading: 1200, previousMeterReading: 1000 }), // truck: 200 km / 50 L
+    fill({
+      vehicleId: "v2",
+      meterReading: 3_432,
+      previousMeterReading: 3_420,
+      liters: new Prisma.Decimal("10.00"),
+      vehicle: { plateNumber: "FL-2201", vehicleType: { name: "Forklift", meterType: "HOURS" } },
+    }), // forklift: 12 hrs / 10 L = 1.20 hrs/L
+    fill({
+      vehicleId: "v3",
+      meterReading: 128_750,
+      previousMeterReading: 128_400,
+      liters: new Prisma.Decimal("100.00"),
+      vehicle: { plateNumber: "GEN-01", vehicleType: { name: "Generator", meterType: "ENERGY" } },
+    }), // generator: 350 kWh / 100 L = 3.50 kWh/L
+  ];
+}
+
 describe("runReport — per-vehicle monthly aggregation", () => {
-  it("sums liters and per-fill distance, deriving km/L", async () => {
+  it("sums liters and per-fill meter delta, deriving efficiency", async () => {
     mockDb.fuelTransaction.findMany.mockResolvedValueOnce([
-      {
-        vehicleId: "v1",
-        issuedAt: new Date("2026-07-03T05:00:00.000Z"),
-        liters: new Prisma.Decimal("50.00"),
-        odometer: 1000,
-        previousOdometer: 900,
-        kmPerLiter: null,
-        isAbnormal: false,
-        vehicle: { plateNumber: "CAB-1", vehicleType: { name: "Truck" } },
-      },
-      {
-        vehicleId: "v1",
+      fill({ meterReading: 1000, previousMeterReading: 900 }),
+      fill({
         issuedAt: new Date("2026-07-10T05:00:00.000Z"),
-        liters: new Prisma.Decimal("50.00"),
-        odometer: 1200,
-        previousOdometer: 1000,
-        kmPerLiter: null,
-        isAbnormal: false,
-        vehicle: { plateNumber: "CAB-1", vehicleType: { name: "Truck" } },
-      },
+        meterReading: 1200,
+        previousMeterReading: 1000,
+      }),
     ]);
 
     const result = await runReport(admin, "vehicle-monthly", {}, { rowLimit: 500 });
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]).toMatchObject({ liters: 100, km: 300, kmPerLiter: 3 });
+    expect(result.rows[0]).toMatchObject({ liters: 100, meterDelta: 300, efficiency: 3 });
+    expect(result.rows[0]).toMatchObject({ _meterType: "DISTANCE" });
+  });
+
+  it("totals liters fleet-wide but meter deltas per meter type only", async () => {
+    mockDb.fuelTransaction.findMany.mockResolvedValueOnce(mixedFleetFills());
+
+    const result = await runReport(admin, "vehicle-monthly", {}, { rowLimit: 500 });
+
+    expect(result.summary).toContainEqual({ label: "Total liters", value: "210 L" });
+    expect(result.summary).toContainEqual({ label: "Total distance", value: "300 km" });
+    expect(result.summary).toContainEqual({ label: "Total hours run", value: "12 hrs" });
+    expect(result.summary).toContainEqual({ label: "Total energy generated", value: "350 kWh" });
+    // No summed 300+12+350 figure may exist anywhere.
+    expect(result.summary.some((item) => item.value.startsWith("662"))).toBe(false);
+  });
+});
+
+describe("runReport — vehicle efficiency (never mixes meter types)", () => {
+  it("groups rows by meter type and emits one fleet tile per type present", async () => {
+    mockDb.fuelTransaction.findMany.mockResolvedValueOnce(mixedFleetFills());
+
+    const result = await runReport(admin, "vehicle-efficiency", {}, { rowLimit: 500 });
+
+    // Rows sorted by meter type group; each carries its own meter type.
+    expect(result.rows.map((row) => row["_meterType"])).toEqual(["DISTANCE", "ENERGY", "HOURS"]);
+    expect(result.rows.find((row) => row["plate"] === "CAB-1")).toMatchObject({
+      meterDelta: 300,
+      efficiency: 3,
+    });
+    expect(result.rows.find((row) => row["plate"] === "FL-2201")).toMatchObject({
+      meterDelta: 12,
+      efficiency: 1.2,
+    });
+    expect(result.rows.find((row) => row["plate"] === "GEN-01")).toMatchObject({
+      meterDelta: 350,
+      efficiency: 3.5,
+    });
+
+    // One per-type fleet tile each; NO single cross-type "fleet efficiency".
+    expect(result.summary).toContainEqual({ label: "Fleet km/L", value: "3.00 km/L" });
+    expect(result.summary).toContainEqual({ label: "Fleet hrs/L", value: "1.20 hrs/L" });
+    expect(result.summary).toContainEqual({ label: "Fleet kWh/L", value: "3.50 kWh/L" });
+    expect(result.summary.filter((item) => item.label.startsWith("Fleet"))).toHaveLength(3);
   });
 });
 

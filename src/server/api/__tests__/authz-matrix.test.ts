@@ -56,6 +56,22 @@ const EXPECTED: Record<string, Access> = {
   "reports.run": SUPERVISOR_UP,
   "reports.vehicleDetail": SUPERVISOR_UP,
 
+  "companies.list": SUPERVISOR_UP,
+  "companies.create": ADMIN_ONLY,
+  "companies.update": ADMIN_ONLY,
+  "companies.delete": ADMIN_ONLY,
+
+  "quotas.getSettings": ADMIN_ONLY,
+  "quotas.updateSettings": ADMIN_ONLY,
+  "quotas.setCompanyQuota": ADMIN_ONLY,
+  "quotas.setVehicleTypeQuota": ADMIN_ONLY,
+  "quotas.setVehicleQuota": ADMIN_ONLY,
+  "quotas.bulkAssign": ADMIN_ONLY,
+  "quotas.grantTopUp": ADMIN_ONLY,
+  "quotas.issueOverrideCode": SUPERVISOR_UP,
+  "quotas.status": SUPERVISOR_UP,
+  "quotas.resolveVehicle": ADMIN_ONLY,
+
   "sites.list": SUPERVISOR_UP,
   "sites.create": ADMIN_ONLY,
   "sites.update": ADMIN_ONLY,

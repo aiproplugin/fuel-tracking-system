@@ -159,7 +159,9 @@
         <div class="callout tip">
           <span class="k">Your one job, in a sentence</span>
           When you fill a vehicle, you record <strong>how many litres</strong> you dispensed and the
-          vehicle's current <strong>odometer</strong>. The app takes care of the stock maths, the
+          vehicle's current <strong>meter reading</strong> — the odometer (km) for road vehicles, the
+          hour meter (hrs) for machines like forklifts, or the energy meter (kWh) for generators.
+          The form always tells you which one. The app takes care of the stock maths, the
           efficiency, and the paperwork.
         </div>
 
@@ -255,7 +257,8 @@
             were flagged for unusual fuel economy).</p>
           <h3>Recent issues</h3>
           <p>Your latest fills, each with the plate, litres, and time. A
-            <span class="chip diesel">km/L</span> tag means that fill was flagged as abnormal.</p>
+            <span class="chip diesel">km/L</span> tag (or hrs/L / kWh/L for machines and generators)
+            means that fill was flagged as abnormal.</p>
         </div>
 
         <div class="callout warn">
@@ -306,7 +309,7 @@
 
         <h2>Vehicle recognised</h2>
         <p>After a successful scan you see the vehicle's details: <strong>plate number</strong>,
-          vehicle type, fuel type, its last odometer reading, and when it was last fuelled. If the
+          vehicle type, fuel type, its last meter reading, and when it was last fuelled. If the
           fuel type matches your tank, you'll see a green <strong>Eligible / Fuel type matches</strong>
           badge.</p>
         <ul>
@@ -333,15 +336,16 @@
 
         <ol class="steps">
           <li><span class="st">Enter "Litres dispensed"</span> The exact amount you put in. Decimals are fine (for example <code>42.5</code>).</li>
-          <li><span class="st">Enter the "Odometer (km)"</span> The vehicle's current reading, in whole kilometres. Read it off the dashboard.</li>
-          <li><span class="st">Check the summary</span> The card below shows the <strong>previous odometer</strong>, the <strong>projected stock</strong> after this issue, and whether efficiency will be calculated.</li>
+          <li><span class="st">Enter the meter reading</span> The field is labelled for the vehicle: <strong>"Odometer (km)"</strong>, <strong>"Hour meter (hrs)"</strong>, or <strong>"Energy meter (kWh)"</strong>. Enter the current reading in whole units, read off the vehicle's own meter.</li>
+          <li><span class="st">Check the summary</span> The card below shows the <strong>previous reading</strong>, the <strong>projected stock</strong> after this issue, and whether efficiency will be calculated.</li>
           <li><span class="st">Tap "Submit"</span> The issue is recorded instantly and you get a receipt.</li>
         </ol>
 
         <div class="callout tip">
-          <span class="k">Get the odometer right</span>
-          Efficiency (km per litre) is worked out from the odometer. A wrong reading throws off the
-          numbers and can trigger a false alert — so double-check the dashboard before you submit.
+          <span class="k">Get the reading right</span>
+          Efficiency (km, hours, or kWh per litre) is worked out from the meter. A wrong reading
+          throws off the numbers and can trigger a false alert — so double-check the meter before
+          you submit.
         </div>
 
         <div class="callout info">
@@ -360,7 +364,7 @@
           start over with a different vehicle.</p>
 
         <div class="shot"><span class="cam">📷</span><span class="lbl">Screenshot placeholder</span>
-          <div class="cap">The fuel issue form: dark tank header, large "Litres dispensed" and "Odometer" fields, and the projection summary.</div></div>
+          <div class="cap">The fuel issue form: dark tank header, large "Litres dispensed" and meter-reading fields, and the projection summary.</div></div>
       </section>
 
       <!-- RECEIPT -->
@@ -373,9 +377,9 @@
         <p>The receipt shows:</p>
         <ul>
           <li><strong>Litres dispensed</strong> and the <strong>plate number</strong>.</li>
-          <li>The <strong>odometer</strong> you recorded and the <strong>tank</strong> it came from.</li>
+          <li>The <strong>meter reading</strong> you recorded and the <strong>tank</strong> it came from.</li>
           <li><strong>Stock after issue</strong> — the tank's new balance.</li>
-          <li><strong>Efficiency</strong> — km/L for this fill, or "Calculates after next fill" for a first fill.</li>
+          <li><strong>Efficiency</strong> — km/L, hrs/L, or kWh/L for this fill (hour and energy meters also show the familiar litres-per-unit alongside, e.g. "1.20 hrs/L (0.83 L/hr)"), or "Calculates after next fill" for a first fill.</li>
         </ul>
 
         <div class="callout warn">
@@ -383,15 +387,15 @@
           If this fill's fuel economy is outside the expected range for the vehicle type, the receipt
           shows an amber <strong>Abnormal consumption</strong> note. <strong>The issue is still
           recorded</strong> — nothing is lost. It just gets flagged so a manager can review it.
-          Common innocent causes: a mistyped odometer, or the vehicle did unusual work. Nothing for
-          you to fix; just make sure your odometer reading was correct.
+          Common innocent causes: a mistyped meter reading, or the vehicle did unusual work. Nothing
+          for you to fix; just make sure your reading was correct.
         </div>
 
         <p>Tap <span class="field">Done</span> to return to your home screen, ready for the next
           vehicle.</p>
 
         <div class="shot"><span class="cam">📷</span><span class="lbl">Screenshot placeholder</span>
-          <div class="cap">The green "Fuel issue recorded" receipt with litres, plate, odometer, tank, stock after, and efficiency.</div></div>
+          <div class="cap">The green "Fuel issue recorded" receipt with litres, plate, meter reading, tank, stock after, and efficiency.</div></div>
       </section>
 
       <!-- BLOCKS -->
@@ -417,16 +421,17 @@
 
         <div class="divider"></div>
 
-        <h2 style="color:var(--diesel)">🟠 Odometer lower than the last record</h2>
-        <p>You entered an odometer reading that is <strong>lower</strong> than the vehicle's last
-          recorded reading. Since an odometer only goes up, the app blocks it and asks for review.
-          The amber screen shows the last recorded reading and what you attempted.</p>
+        <h2 style="color:var(--diesel)">🟠 Meter reading lower than the last record</h2>
+        <p>You entered a meter reading that is <strong>lower</strong> than the vehicle's last
+          recorded reading. A usage meter — odometer, hour meter, or energy meter — only goes up,
+          so the app blocks it and asks for review. The amber screen shows the last recorded
+          reading and what you attempted.</p>
         <p>You have two choices:</p>
         <ul>
           <li><span class="field">Go back</span> — if you simply mistyped, return and enter the
             correct, higher reading.</li>
           <li><span class="btnpill dark">Flag for admin review</span> — if you're sure the reading is
-            right (for example the odometer was replaced or genuinely reset), flag it. An
+            right (for example the meter was replaced or genuinely reset), flag it. An
             administrator will check it.</li>
         </ul>
         <div class="callout warn">
@@ -453,7 +458,7 @@
         </div>
 
         <div class="shot"><span class="cam">📷</span><span class="lbl">Screenshot placeholder</span>
-          <div class="cap">Three block screens side by side: red fuel-type mismatch, amber odometer block, amber insufficient stock.</div></div>
+          <div class="cap">Three block screens side by side: red fuel-type mismatch, amber meter block, amber insufficient stock.</div></div>
       </section>
 
       <!-- NOT JOB -->
@@ -469,7 +474,7 @@
           <tr><td>Issue fuel to a vehicle</td><td><strong>You</strong> (operator)</td></tr>
           <tr><td>Record a fuel <strong>delivery</strong> into a tank</td><td>Supervisor or Administrator</td></tr>
           <tr><td>Record a stock <strong>adjustment</strong> / correction</td><td>Supervisor or Administrator</td></tr>
-          <tr><td>Approve an odometer override</td><td>Administrator only</td></tr>
+          <tr><td>Approve a meter-reading override</td><td>Administrator only</td></tr>
           <tr><td>Assign or change your tank</td><td>Administrator only</td></tr>
         </table>
 
@@ -488,16 +493,16 @@
 
         <h2>The everyday flow</h2>
         <p><span class="btnpill">Scan vehicle QR</span> → confirm the vehicle →
-          <span class="btnpill">Continue</span> → enter litres &amp; odometer →
+          <span class="btnpill">Continue</span> → enter litres &amp; meter reading →
           <span class="btnpill">Submit</span> → <span class="btnpill ghost">Done</span>.</p>
 
         <h2>What each block means</h2>
         <div class="tablewrap"><table>
           <tr><th>Screen</th><th>Meaning</th><th>Do this</th></tr>
           <tr><td>🔴 Fuel type mismatch</td><td>Wrong fuel for your tank</td><td>Don't fuel it. Scan another vehicle.</td></tr>
-          <tr><td>🟠 Odometer too low</td><td>Reading below last record</td><td>Fix it, or flag for admin review.</td></tr>
+          <tr><td>🟠 Meter reading too low</td><td>Reading below last record</td><td>Fix it, or flag for admin review.</td></tr>
           <tr><td>🟠 Not enough stock</td><td>Ledger stock too low</td><td>Ask a supervisor to record the delivery.</td></tr>
-          <tr><td>🟠 Abnormal consumption</td><td>Unusual km/L (still recorded)</td><td>Check your odometer was right. Carry on.</td></tr>
+          <tr><td>🟠 Abnormal consumption</td><td>Unusual efficiency (still recorded)</td><td>Check your reading was right. Carry on.</td></tr>
         </table></div>
 
         <h2>Common questions, fast</h2>
@@ -506,7 +511,7 @@
           <li><strong>Forgot your password?</strong> An administrator resets it and gives you a temporary one; you set your own at next sign-in.</li>
           <li><strong>Camera won't start?</strong> Use manual token entry (the <code>FT-…</code> code under the QR).</li>
           <li><strong>"No tank assigned"?</strong> An admin must bind a tank to you; sign out and in after they do.</li>
-          <li><strong>Flagged an odometer?</strong> Don't resubmit — it records itself once an admin approves.</li>
+          <li><strong>Flagged a meter reading?</strong> Don't resubmit — it records itself once an admin approves.</li>
         </ul>
 
         <p>For anything else, see the <strong>Help / Troubleshooting / FAQ</strong> guide or ask your

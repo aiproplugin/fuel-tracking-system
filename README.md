@@ -138,7 +138,7 @@ manager: read-only; operators: no access by design — see docs/security.md).
    entry** — print or copy a token from Admin → QR Tokens (the QR encodes the
    `FT-…` string).
 3. Try the guard rails: a petrol vehicle (e.g. PG-1204) hard-blocks with the
-   red mismatch screen; an odometer lower than the last reading blocks with
+   red mismatch screen; a meter reading lower than the last one blocks with
    the amber screen and "Flag for admin review"; the flagged entry then
    appears for review under Admin → Fuel Issues (admin only can approve with
    a corrected reading + reason).

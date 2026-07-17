@@ -9,10 +9,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { formatReportCell } from "@/lib/reports/format-cell";
+import { formatReportCell, rowMeterType } from "@/lib/reports/format-cell";
 import type { ReportColumn, ReportRow } from "@/server/services/reports/report-types";
 
-const NUMERIC_TYPES = new Set(["number", "liters", "km", "kmpl"]);
+const NUMERIC_TYPES = new Set(["number", "liters", "meter", "efficiency"]);
 
 /**
  * Generic report renderer. Reads `columns` + `rows` straight from the service
@@ -60,12 +60,19 @@ export function ReportTable({
                 <TableRow key={rowIndex}>
                   {columns.map((column, columnIndex) => {
                     const numeric = NUMERIC_TYPES.has(column.type);
-                    const text = formatReportCell(row[column.key] ?? null, column.type);
+                    const text = formatReportCell(
+                      row[column.key] ?? null,
+                      column.type,
+                      rowMeterType(row),
+                    );
                     const isLinkCell = columnIndex === 0 && href;
                     return (
                       <TableCell
                         key={column.key}
-                        className={cn(numeric && "text-right tabular-nums", columnIndex === 0 && "font-semibold")}
+                        className={cn(
+                          numeric && "text-right tabular-nums",
+                          columnIndex === 0 && "font-semibold",
+                        )}
                       >
                         {isLinkCell ? (
                           <Link href={href} className="text-primary hover:underline">

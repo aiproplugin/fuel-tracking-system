@@ -40,20 +40,24 @@ Tables (snake_case; the Prisma model is the source of truth in `prisma/schema.pr
   `locked_until` (lockout state).
 - **tank** — fuel type, capacity, `current_stock` (cache of the latest ledger
   `balance_after`), low-stock threshold.
-- **vehicle_type** — the per-type min/max km/L abnormal-consumption band.
-- **vehicle** — unique plate, type, fuel type, cached `current_odometer`.
+- **vehicle_type** — the meter type (`DISTANCE` km / `HOURS` hrs / `ENERGY`
+  kWh) and the per-type min/max efficiency abnormal-consumption band, in the
+  type's own unit per litre (km/L, hrs/L, kWh/L).
+- **vehicle** — unique plate, type, fuel type, cached `current_meter`
+  (reading in the type's meter unit).
 - **driver** — optional everywhere; reports hidden until enabled.
 - **qr_token** — opaque random token per vehicle in its own table; rotation =
   deactivate + insert, vehicle history untouched.
-- **fuel_transaction** — liters, odometer + previous, unique
-  `idempotency_key`, override fields (admin-only), `km_per_liter`
-  (null on first fill), `is_abnormal`, hidden `unit_cost`, backdatable
+- **fuel_transaction** — liters, meter reading + previous, unique
+  `idempotency_key`, override fields (admin-only), `efficiency`
+  (output per litre; null on first fill), `is_abnormal`, hidden
+  `unit_cost`, backdatable
   `issued_at`.
 - **delivery**, **stock_adjustment** — headers for the other movement kinds.
 - **stock_movement** — THE LEDGER. Append-only, BigInt autoincrement id =
   strict insertion order, signed quantity, `balance_after`, exactly one FK to
   its source record (fuel_transaction / delivery / adjustment).
-- **odometer_exception** — operator-flagged blocked entries, ADMIN review
+- **meter_exception** — operator-flagged blocked entries, ADMIN review
   workflow (PENDING/APPROVED/REJECTED).
 - **audit_log** — append-only actor/action/entity/before/after/IP.
 
@@ -91,11 +95,11 @@ Tables (snake_case; the Prisma model is the source of truth in `prisma/schema.pr
   tank row — an emptied tank yields INSUFFICIENT_STOCK, never a negative
   ledger balance.
 - Business blocks are a typed result union (`SUCCESS | FUEL_TYPE_MISMATCH |
-ODOMETER_BLOCKED | INSUFFICIENT_STOCK`), mapped by the client state machine
+METER_BLOCKED | INSUFFICIENT_STOCK`), mapped by the client state machine
   (`scan-flow.tsx`) to the M4–M7 prototype screens. Idempotency-key replays
   return the original receipt; a concurrent duplicate falls back through the
   unique-key violation to the same replay path.
-- Exception path: M6 flag -> PENDING odometer_exception (carries liters) ->
+- Exception path: M6 flag -> PENDING meter_exception (carries liters) ->
   D6 ADMIN review. APPROVE completes the issue as an audited override
   transaction (the fuel physically left the tank when dispensed); REJECT
   writes nothing to the ledger.

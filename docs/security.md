@@ -66,13 +66,14 @@
   the tRPC gates.
 - **Audit coverage extended**: USER_CREATED/UPDATED, ROLE_CHANGED,
   TANK_ASSIGNED (before/after tank), TANK/VEHICLE/SITE create+update,
-  SETTINGS_CHANGED (km/L band before/after), QR_TOKEN created/rotated/
+  SETTINGS_CHANGED (meter type + efficiency band before/after), QR_TOKEN created/rotated/
   deactivated. Password hashes and plaintext never enter audit payloads
   (covered by test).
 - **Operational safety rails**: the last active ADMIN cannot be demoted or
-  deactivated; tank fuel type is immutable after creation; vehicle odometers
-  are not editable through CRUD (only fuel issues / exception review);
-  operators changing role lose their tank binding.
+  deactivated; tank fuel type is immutable after creation; vehicle meter
+  readings are not editable through CRUD (only fuel issues / exception
+  review); a vehicle type's meter type is locked once its vehicles have
+  recorded history; operators changing role lose their tank binding.
 - **QR tokens**: opaque `FT-<uuid>` in their own table, at most one active
   per vehicle, rotation atomically deactivates the old sheet; the printed
   sheet contains only the token QR + plate text.
@@ -100,7 +101,7 @@
 ## Implemented in Phase 3
 
 - **Server-side re-validation of every fuel rule**: the operator UI is UX
-  only — mismatch, odometer regression, stock, liters bounds, vehicle/tank
+  only — mismatch, meter regression, stock, liters bounds, vehicle/tank
   activity are all enforced in the service, and the tank always comes from
   the session (schemas reject any client-sent tank as an unknown field).
 - **Atomic ledger writes with race-safe stock guard** (no raw SQL): the
@@ -113,12 +114,12 @@
 - **Token hygiene**: scanned tokens stay in client memory (never URLs);
   unknown/inactive tokens return a uniform not-found (no enumeration);
   the plate appears only after a successful active-token match.
-- **Override authority**: only ADMIN can approve a corrected odometer;
+- **Override authority**: only ADMIN can approve a corrected meter reading;
   approval is double-guarded (status + stock) inside one transaction and
-  audited as ODOMETER_OVERRIDE + ODOMETER_EXCEPTION_REVIEWED with the
+  audited as METER_OVERRIDE + METER_EXCEPTION_REVIEWED with the
   mandatory reason.
 - **Audit**: FUEL_ISSUED on every recorded issue;
-  ODOMETER_EXCEPTION_FLAGGED on operator flags.
+  METER_EXCEPTION_FLAGGED on operator flags.
 
 ## Implemented in Phase 4
 
@@ -155,7 +156,7 @@
   dashboard query resolves the actor's role/site server-side; supervisors see
   their own site, managers/admins see all. No dashboard path writes to the
   ledger. The reconciliation panel and exception queue surface state read-only.
-- **No new mutation surface** was introduced — alerts (low stock, odometer
+- **No new mutation surface** was introduced — alerts (low stock, meter
   exceptions, abnormal consumption) are derived from existing ledger data, so
   no additional authorization boundary was added.
 
@@ -289,6 +290,6 @@ internal release rather than force-upgraded. Triage:
 
 - QR tokens are opaque and stored in their own table; a leaked token reveals
   nothing about the vehicle and can be rotated without history loss.
-- Odometer overrides are ADMIN-only, reason-required, and audit-logged.
+- Meter-reading overrides are ADMIN-only, reason-required, and audit-logged.
 - Idempotency keys prevent double-issue on retries/double-taps.
 - No PII in URLs, query strings, or logs.

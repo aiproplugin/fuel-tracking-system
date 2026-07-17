@@ -14,6 +14,8 @@ import {
 export interface SiteRow {
   id: string;
   name: string;
+  companyId: string;
+  companyName: string;
   tankCount: number;
   userCount: number;
 }
@@ -27,13 +29,14 @@ export interface SiteTableProps {
 }
 
 export function SiteTable({ sites, isLoading, canEdit, onEdit, onDelete }: SiteTableProps) {
-  const columnCount = canEdit ? 4 : 3;
+  const columnCount = canEdit ? 5 : 4;
   return (
     <TableContainer>
       <Table>
         <TableHeader>
           <tr>
             <TableHead>Site</TableHead>
+            <TableHead>Company</TableHead>
             <TableHead>Tanks</TableHead>
             <TableHead>Users</TableHead>
             {canEdit ? <TableHead /> : null}
@@ -58,6 +61,7 @@ export function SiteTable({ sites, isLoading, canEdit, onEdit, onDelete }: SiteT
               return (
                 <TableRow key={site.id}>
                   <TableCell className="font-semibold">{site.name}</TableCell>
+                  <TableCell className="text-muted">{site.companyName}</TableCell>
                   <TableCell className="text-muted">{site.tankCount}</TableCell>
                   <TableCell className="text-muted">{site.userCount}</TableCell>
                   {canEdit ? (

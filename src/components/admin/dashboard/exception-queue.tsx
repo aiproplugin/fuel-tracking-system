@@ -3,21 +3,26 @@ import { StatusIcon, type StatusKind } from "@/components/ui/status-icon";
 import type { ExceptionKind, ExceptionQueueItem } from "@/server/services/dashboard.service";
 
 /**
- * D1 "Exception queue" — the alert panel. Aggregates pending odometer
- * exceptions, low-stock tanks, and abnormal-consumption flags. Odometer rows
+ * D1 "Exception queue" — the alert panel. Aggregates pending meter
+ * exceptions, low-stock tanks, and abnormal-consumption flags. Meter rows
  * deep-link to the review screen (D6); the other kinds are informational.
  */
 const KIND_META: Record<
   ExceptionKind,
   { label: string; tone: StatusKind; badgeClass: string; href?: string }
 > = {
-  ODOMETER: {
-    label: "Odometer",
+  METER: {
+    label: "Meter",
     tone: "danger",
     badgeClass: "text-danger",
     href: "/admin/fuel-issues",
   },
-  LOW_STOCK: { label: "Low stock", tone: "warning", badgeClass: "text-warning", href: "/admin/tanks" },
+  LOW_STOCK: {
+    label: "Low stock",
+    tone: "warning",
+    badgeClass: "text-warning",
+    href: "/admin/tanks",
+  },
   EFFICIENCY: { label: "Efficiency", tone: "info", badgeClass: "text-info" },
 };
 
@@ -26,7 +31,9 @@ export function ExceptionQueue({ items }: { items: ExceptionQueueItem[] }) {
     <div className="rounded-[28px] border border-border bg-card p-6">
       <div className="flex items-center justify-between">
         <p className="font-bold">Exception queue</p>
-        <span className="text-sm text-danger">{items.length > 0 ? "Needs review" : "All clear"}</span>
+        <span className="text-sm text-danger">
+          {items.length > 0 ? "Needs review" : "All clear"}
+        </span>
       </div>
 
       <div className="mt-5 space-y-3 text-sm">

@@ -14,23 +14,51 @@
  * created for tanks whose ledger is still empty.
  */
 import { randomUUID } from "node:crypto";
-import { PrismaClient, Prisma, Role, FuelType } from "@prisma/client";
+import { PrismaClient, Prisma, Role, FuelType, MeterType } from "@prisma/client";
 import { hashPassword } from "../src/server/auth/password";
 
 const prisma = new PrismaClient();
 
-async function seedSites() {
+async function seedCompanies() {
+  const names = ["Macktiles", "Multilac", "Mandarina"] as const;
+  const companies: Record<string, { id: string }> = {};
+  for (const name of names) {
+    companies[name] = await prisma.company.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+      select: { id: true },
+    });
+  }
+  return companies as Record<(typeof names)[number], { id: string }>;
+}
+
+async function seedSites(companyIds: { macktiles: string; multilac: string }) {
   const mainDepot = await prisma.site.upsert({
     where: { name: "Main Depot" },
-    update: {},
-    create: { name: "Main Depot" },
+    // Re-runs converge existing rows (e.g. migration's "Default Company")
+    // onto the real group companies.
+    update: { companyId: companyIds.macktiles },
+    create: { name: "Main Depot", companyId: companyIds.macktiles },
   });
   const northYard = await prisma.site.upsert({
     where: { name: "North Yard" },
-    update: {},
-    create: { name: "North Yard" },
+    update: { companyId: companyIds.multilac },
+    create: { name: "North Yard", companyId: companyIds.multilac },
   });
   return { mainDepot, northYard };
+}
+
+/**
+ * Quota settings singleton. Created DISABLED so seeding never turns
+ * enforcement on; re-runs leave any admin-tuned configuration untouched.
+ */
+async function seedQuotaSettings() {
+  await prisma.quotaSettings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1 },
+  });
 }
 
 async function seedTanks(siteIds: { mainDepot: string; northYard: string }) {
@@ -144,53 +172,106 @@ async function seedUsers(ids: { mainDepotId: string; tankAId: string; tankBId: s
   return results;
 }
 
-async function seedVehicleTypesAndVehicles() {
-  const types: Array<{ name: string; min: string; max: string }> = [
-    { name: "Bowser Truck", min: "2.00", max: "6.00" },
-    { name: "Lorry", min: "3.00", max: "8.00" },
-    { name: "Pickup", min: "6.00", max: "14.00" },
-    { name: "Car", min: "8.00", max: "18.00" },
+async function seedVehicleTypesAndVehicles(companyIds: {
+  macktiles: string;
+  multilac: string;
+  mandarina: string;
+}) {
+  // Efficiency bands are in each type's own unit per litre:
+  // DISTANCE km/L, HOURS hrs/L, ENERGY kWh/L.
+  const types: Array<{ name: string; meterType: MeterType; min: string; max: string }> = [
+    { name: "Bowser Truck", meterType: MeterType.DISTANCE, min: "2.00", max: "6.00" },
+    { name: "Lorry", meterType: MeterType.DISTANCE, min: "3.00", max: "8.00" },
+    { name: "Pickup", meterType: MeterType.DISTANCE, min: "6.00", max: "14.00" },
+    { name: "Car", meterType: MeterType.DISTANCE, min: "8.00", max: "18.00" },
+    { name: "Forklift", meterType: MeterType.HOURS, min: "0.80", max: "2.50" },
+    { name: "Generator", meterType: MeterType.ENERGY, min: "2.50", max: "4.00" },
   ];
   const typeIds: Record<string, string> = {};
   for (const type of types) {
     const row = await prisma.vehicleType.upsert({
       where: { name: type.name },
       update: {
-        minKmPerLiter: new Prisma.Decimal(type.min),
-        maxKmPerLiter: new Prisma.Decimal(type.max),
+        meterType: type.meterType,
+        minEfficiency: new Prisma.Decimal(type.min),
+        maxEfficiency: new Prisma.Decimal(type.max),
       },
       create: {
         name: type.name,
-        minKmPerLiter: new Prisma.Decimal(type.min),
-        maxKmPerLiter: new Prisma.Decimal(type.max),
+        meterType: type.meterType,
+        minEfficiency: new Prisma.Decimal(type.min),
+        maxEfficiency: new Prisma.Decimal(type.max),
       },
       select: { id: true },
     });
     typeIds[type.name] = row.id;
   }
 
+  // meter = the reading in the type's meter unit (km / hrs / kWh).
   const vehicles: Array<{
     plate: string;
     type: string;
     fuelType: FuelType;
-    odometer: number;
+    meter: number;
+    companyId: string;
   }> = [
-    { plate: "CAB-4587", type: "Bowser Truck", fuelType: FuelType.DIESEL, odometer: 124_880 },
-    { plate: "NC-7712", type: "Lorry", fuelType: FuelType.DIESEL, odometer: 88_450 },
-    { plate: "PG-1204", type: "Pickup", fuelType: FuelType.PETROL, odometer: 45_310 },
-    { plate: "KV-9034", type: "Car", fuelType: FuelType.PETROL, odometer: 61_204 },
+    {
+      plate: "CAB-4587",
+      type: "Bowser Truck",
+      fuelType: FuelType.DIESEL,
+      meter: 124_880,
+      companyId: companyIds.multilac,
+    },
+    {
+      plate: "NC-7712",
+      type: "Lorry",
+      fuelType: FuelType.DIESEL,
+      meter: 88_450,
+      companyId: companyIds.macktiles,
+    },
+    {
+      plate: "PG-1204",
+      type: "Pickup",
+      fuelType: FuelType.PETROL,
+      meter: 45_310,
+      companyId: companyIds.macktiles,
+    },
+    {
+      plate: "KV-9034",
+      type: "Car",
+      fuelType: FuelType.PETROL,
+      meter: 61_204,
+      companyId: companyIds.mandarina,
+    },
+    {
+      plate: "FL-2201",
+      type: "Forklift",
+      fuelType: FuelType.DIESEL,
+      meter: 3_420,
+      companyId: companyIds.macktiles,
+    },
+    {
+      plate: "GEN-01",
+      type: "Generator",
+      fuelType: FuelType.DIESEL,
+      meter: 128_400,
+      companyId: companyIds.multilac,
+    },
   ];
   for (const vehicle of vehicles) {
     const typeId = typeIds[vehicle.type];
     if (!typeId) throw new Error(`Unknown vehicle type: ${vehicle.type}`);
     const row = await prisma.vehicle.upsert({
       where: { plateNumber: vehicle.plate },
-      update: {},
+      // Converge existing rows (migration's "Default Company") onto the
+      // real owning companies on re-run.
+      update: { companyId: vehicle.companyId },
       create: {
         plateNumber: vehicle.plate,
         vehicleTypeId: typeId,
+        companyId: vehicle.companyId,
         fuelType: vehicle.fuelType,
-        currentOdometer: vehicle.odometer,
+        currentMeter: vehicle.meter,
       },
       select: { id: true },
     });
@@ -262,7 +343,13 @@ async function seedInitialStock(adminId: string, tanks: Array<{ id: string; lite
 }
 
 async function main() {
-  const { mainDepot, northYard } = await seedSites();
+  const companies = await seedCompanies();
+  const companyIds = {
+    macktiles: companies.Macktiles.id,
+    multilac: companies.Multilac.id,
+    mandarina: companies.Mandarina.id,
+  };
+  const { mainDepot, northYard } = await seedSites(companyIds);
   const { tankA, tankB, tankC } = await seedTanks({
     mainDepot: mainDepot.id,
     northYard: northYard.id,
@@ -272,8 +359,9 @@ async function main() {
     tankAId: tankA.id,
     tankBId: tankB.id,
   });
-  await seedVehicleTypesAndVehicles();
+  await seedVehicleTypesAndVehicles(companyIds);
   await seedDrivers();
+  await seedQuotaSettings();
 
   const admin = users["admin"];
   if (!admin) throw new Error("Admin user was not seeded");
@@ -284,7 +372,9 @@ async function main() {
   ]);
 
   // eslint-disable-next-line no-console -- CLI script, not app runtime
-  console.log("Seed complete: 2 sites, 3 tanks, 5 users, 4 vehicle types, 4 vehicles.");
+  console.log(
+    "Seed complete: 3 companies, 2 sites, 3 tanks, 5 users, 6 vehicle types, 6 vehicles.",
+  );
 }
 
 main()

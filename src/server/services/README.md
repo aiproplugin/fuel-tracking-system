@@ -5,9 +5,12 @@ ALL business rules live here, and ONLY here:
 - Every fuel-quantity change (issue, delivery, adjustment) runs inside ONE
   atomic Prisma transaction and writes exactly one `stock_movement` ledger row
   with `balance_after`.
-- Hard blocks: fuel-type mismatch, odometer regression (admin-only override).
+- Hard blocks: fuel-type mismatch, meter regression (admin-only override) —
+  identical for every meter type (km / hrs / kWh).
 - Idempotency-key dedupe for fuel submissions.
-- Efficiency (km/L) calculation and abnormal-consumption flagging.
+- Efficiency (meter delta per litre: km/L, hrs/L, kWh/L) calculation and
+  abnormal-consumption flagging — one code path, parameterised by the vehicle
+  type's MeterType.
 - Audit-log writes for every sensitive action.
 
 tRPC routers (`src/server/api`) stay thin: validate input (Zod), check

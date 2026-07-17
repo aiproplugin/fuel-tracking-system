@@ -15,33 +15,42 @@ export const lookupVehicleSchema = strictObject({
 });
 
 export const MAX_LITERS_PER_ISSUE = 10_000;
-export const MAX_ODOMETER_KM = 10_000_000;
+/** Whole units of the vehicle type's meter (km / hrs / kWh). */
+export const MAX_METER_READING = 10_000_000;
 
 export const submitFuelIssueSchema = strictObject({
   vehicleId: idSchema,
   /** Client-generated per attempt; retries/double-taps reuse the same key. */
   idempotencyKey: idSchema,
   liters: z.number().positive("Liters must be positive").max(MAX_LITERS_PER_ISSUE),
-  odometer: z.number().int().min(0).max(MAX_ODOMETER_KM),
+  meterReading: z.number().int().min(0).max(MAX_METER_READING),
+  /**
+   * Single-use supervisor override code for an over-quota fill
+   * (WARN_OVERRIDE enforcement mode only). Validated and consumed server-side.
+   */
+  overrideCode: z
+    .string()
+    .regex(/^\d{6}$/, "Enter the 6-digit code")
+    .optional(),
 });
 
-export const flagOdometerExceptionSchema = strictObject({
+export const flagMeterExceptionSchema = strictObject({
   vehicleId: idSchema,
-  attemptedOdometer: z.number().int().min(0).max(MAX_ODOMETER_KM),
+  attemptedReading: z.number().int().min(0).max(MAX_METER_READING),
   liters: z.number().positive().max(MAX_LITERS_PER_ISSUE),
 });
 
-export const reviewOdometerExceptionSchema = strictObject({
+export const reviewMeterExceptionSchema = strictObject({
   exceptionId: idSchema,
   decision: z.enum(["APPROVE", "REJECT"]),
-  correctedOdometer: z.number().int().min(0).max(MAX_ODOMETER_KM).optional(),
+  correctedReading: z.number().int().min(0).max(MAX_METER_READING).optional(),
   reason: z.string().trim().min(5, "A reason is required (min 5 characters)").max(500),
 }).superRefine((review, ctx) => {
-  if (review.decision === "APPROVE" && review.correctedOdometer === undefined) {
+  if (review.decision === "APPROVE" && review.correctedReading === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ["correctedOdometer"],
-      message: "A corrected odometer is required to approve",
+      path: ["correctedReading"],
+      message: "A corrected meter reading is required to approve",
     });
   }
 });

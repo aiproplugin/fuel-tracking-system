@@ -5,7 +5,7 @@ const { mockDb } = vi.hoisted(() => ({
   mockDb: {
     tank: { findMany: vi.fn() },
     fuelTransaction: { findMany: vi.fn() },
-    odometerException: { count: vi.fn(), findMany: vi.fn() },
+    meterException: { count: vi.fn(), findMany: vi.fn() },
     stockMovement: { findMany: vi.fn() },
   },
 }));
@@ -43,7 +43,11 @@ function tanks() {
 function weekTransactions() {
   return [
     { issuedAt: TODAY_TXN, liters: new Prisma.Decimal("42.00"), isAbnormal: false },
-    { issuedAt: new Date("2026-07-03T04:00:00.000Z"), liters: new Prisma.Decimal("8.00"), isAbnormal: true },
+    {
+      issuedAt: new Date("2026-07-03T04:00:00.000Z"),
+      liters: new Prisma.Decimal("8.00"),
+      isAbnormal: true,
+    },
     { issuedAt: THREE_DAYS_AGO, liters: new Prisma.Decimal("100.00"), isAbnormal: false },
   ];
 }
@@ -54,26 +58,28 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
 
   mockDb.tank.findMany.mockResolvedValue(tanks());
-  mockDb.fuelTransaction.findMany.mockImplementation((args: { where: { isAbnormal?: boolean } }) => {
-    if (args.where.isAbnormal) {
-      return Promise.resolve([
-        {
-          id: "ft-ab",
-          kmPerLiter: new Prisma.Decimal("3.20"),
-          vehicle: { plateNumber: "PG-1204" },
-          tank: { name: "Tank A" },
-        },
-      ]);
-    }
-    return Promise.resolve(weekTransactions());
-  });
-  mockDb.odometerException.count.mockResolvedValue(4);
-  mockDb.odometerException.findMany.mockResolvedValue([
+  mockDb.fuelTransaction.findMany.mockImplementation(
+    (args: { where: { isAbnormal?: boolean } }) => {
+      if (args.where.isAbnormal) {
+        return Promise.resolve([
+          {
+            id: "ft-ab",
+            efficiency: new Prisma.Decimal("3.20"),
+            vehicle: { plateNumber: "PG-1204", vehicleType: { meterType: "DISTANCE" } },
+            tank: { name: "Tank A" },
+          },
+        ]);
+      }
+      return Promise.resolve(weekTransactions());
+    },
+  );
+  mockDb.meterException.count.mockResolvedValue(4);
+  mockDb.meterException.findMany.mockResolvedValue([
     {
-      id: "oe-1",
-      attemptedOdometer: 124100,
-      previousOdometer: 124880,
-      vehicle: { plateNumber: "CAB-4587" },
+      id: "me-1",
+      attemptedReading: 124100,
+      previousReading: 124880,
+      vehicle: { plateNumber: "CAB-4587", vehicleType: { meterType: "DISTANCE" } },
       tank: { name: "Tank A" },
     },
   ]);
@@ -85,7 +91,11 @@ beforeEach(() => {
       balanceAfter: new Prisma.Decimal("2438.00"),
       createdAt: NOW,
       tank: { name: "Tank A" },
-      fuelTransaction: { issuedAt: TODAY_TXN, isAbnormal: false, vehicle: { plateNumber: "CAB-4587" } },
+      fuelTransaction: {
+        issuedAt: TODAY_TXN,
+        isAbnormal: false,
+        vehicle: { plateNumber: "CAB-4587" },
+      },
       delivery: null,
       adjustment: null,
     },
@@ -136,7 +146,7 @@ describe("getDashboardSummary — KPIs", () => {
     expect(result.kpis.petrolStockLiters).toBe(8420);
     expect(result.kpis.dieselStockLiters).toBe(500);
     expect(result.kpis.lowStockTanks).toBe(1); // Tank B below threshold
-    expect(result.kpis.odometerExceptionsPending).toBe(4);
+    expect(result.kpis.meterExceptionsPending).toBe(4);
   });
 });
 
@@ -174,10 +184,13 @@ describe("getDashboardSummary — scoping (never trust the client)", () => {
 });
 
 describe("getDashboardSummary — alerts & activity", () => {
-  it("composes the exception queue from odometer, low-stock, and efficiency alerts", async () => {
+  it("composes the exception queue from meter, low-stock, and efficiency alerts", async () => {
     const result = await getDashboardSummary(admin, { range: "SEVEN_DAYS" });
     const kinds = result.exceptionQueue.map((item) => item.kind);
-    expect(kinds).toEqual(["ODOMETER", "LOW_STOCK", "EFFICIENCY"]);
+    expect(kinds).toEqual(["METER", "LOW_STOCK", "EFFICIENCY"]);
+    // Per-row units come from the vehicle's meter type.
+    expect(result.exceptionQueue[0]!.detail).toContain("124,100 km");
+    expect(result.exceptionQueue[2]!.detail).toContain("3.20 km/L");
   });
 
   it("maps ledger movements to signed, status-tagged recent activity", async () => {
@@ -188,7 +201,13 @@ describe("getDashboardSummary — alerts & activity", () => {
       vehicleLabel: "CAB-4587",
       liters: -42,
     });
-    expect(result.recentTransactions[1]).toMatchObject({ status: "DELIVERY", vehicleLabel: "Lanka IOC" });
-    expect(result.recentTransactions[2]).toMatchObject({ status: "ADJUSTMENT", vehicleLabel: null });
+    expect(result.recentTransactions[1]).toMatchObject({
+      status: "DELIVERY",
+      vehicleLabel: "Lanka IOC",
+    });
+    expect(result.recentTransactions[2]).toMatchObject({
+      status: "ADJUSTMENT",
+      vehicleLabel: null,
+    });
   });
 });

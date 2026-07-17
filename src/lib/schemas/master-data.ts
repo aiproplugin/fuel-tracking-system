@@ -11,7 +11,7 @@ export const idSchema = z.string().uuid();
 export const fuelTypeSchema = z.enum(["PETROL", "DIESEL"]);
 export const roleSchema = z.enum(["OPERATOR", "SUPERVISOR", "MANAGER", "ADMIN"]);
 
-const nameSchema = z.string().trim().min(2).max(80);
+export const nameSchema = z.string().trim().min(2).max(80);
 
 /** Sri Lankan style plates plus generic fleet codes: "CAB-4587", "NC-7712". */
 export const plateNumberSchema = z
@@ -24,9 +24,13 @@ export const plateNumberSchema = z
 
 // --- Sites ------------------------------------------------------------------
 
-export const createSiteSchema = strictObject({ name: nameSchema });
+export const createSiteSchema = strictObject({ name: nameSchema, companyId: idSchema });
 
-export const updateSiteSchema = strictObject({ id: idSchema, name: nameSchema });
+export const updateSiteSchema = strictObject({
+  id: idSchema,
+  name: nameSchema,
+  companyId: idSchema,
+});
 
 export const deleteSiteSchema = strictObject({ id: idSchema });
 
@@ -56,18 +60,22 @@ export const updateTankSchema = strictObject({
   path: ["lowStockThreshold"],
 });
 
-// --- Vehicle types (Settings: abnormal-consumption bands) --------------------
+// --- Vehicle types (Settings: meter type + abnormal-consumption bands) -------
 
-const kmPerLiterSchema = z.number().positive().max(200);
+export const meterTypeSchema = z.enum(["DISTANCE", "HOURS", "ENERGY"]);
+
+/** Band bound in the type's own efficiency unit (km/L, hrs/L, kWh/L). */
+const efficiencyBoundSchema = z.number().positive().max(200);
 
 export const upsertVehicleTypeSchema = strictObject({
   id: idSchema.optional(),
   name: nameSchema,
-  minKmPerLiter: kmPerLiterSchema,
-  maxKmPerLiter: kmPerLiterSchema,
-}).refine((band) => band.minKmPerLiter < band.maxKmPerLiter, {
-  message: "Minimum km/L must be below maximum km/L",
-  path: ["minKmPerLiter"],
+  meterType: meterTypeSchema,
+  minEfficiency: efficiencyBoundSchema,
+  maxEfficiency: efficiencyBoundSchema,
+}).refine((band) => band.minEfficiency < band.maxEfficiency, {
+  message: "Minimum efficiency must be below maximum efficiency",
+  path: ["minEfficiency"],
 });
 
 // --- Vehicles -----------------------------------------------------------------
@@ -75,14 +83,17 @@ export const upsertVehicleTypeSchema = strictObject({
 export const createVehicleSchema = strictObject({
   plateNumber: plateNumberSchema,
   vehicleTypeId: idSchema,
+  companyId: idSchema,
   fuelType: fuelTypeSchema,
-  currentOdometer: z.number().int().min(0).max(10_000_000),
+  /** Starting reading in the type's meter unit (km / hrs / kWh). */
+  currentMeter: z.number().int().min(0).max(10_000_000),
 });
 
 export const updateVehicleSchema = strictObject({
   id: idSchema,
   plateNumber: plateNumberSchema,
   vehicleTypeId: idSchema,
+  companyId: idSchema,
   fuelType: fuelTypeSchema,
   isActive: z.boolean(),
 });

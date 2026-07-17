@@ -18,13 +18,16 @@ const { mockDb } = vi.hoisted(() => ({
       update: vi.fn(),
     },
     qrToken: { findUnique: vi.fn() },
-    odometerException: {
+    meterException: {
       create: vi.fn(),
       findUnique: vi.fn(),
       updateMany: vi.fn(),
     },
     stockMovement: { create: vi.fn() },
     auditLog: { create: vi.fn() },
+    // No quota_settings row = master switch OFF: these tests exercise the
+    // pre-quota behaviour, which must be unchanged while the switch is off.
+    quotaSettings: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -32,8 +35,8 @@ const { mockDb } = vi.hoisted(() => ({
 vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import {
-  flagOdometerException,
-  reviewOdometerException,
+  flagMeterException,
+  reviewMeterException,
   submitFuelIssue,
   type OperatorActor,
 } from "@/server/services/fuel-issue.service";
@@ -63,20 +66,51 @@ function makeVehicle(overrides: Record<string, unknown> = {}) {
     plateNumber: "CAB-4587",
     fuelType: "DIESEL",
     isActive: true,
-    currentOdometer: 124_880,
+    currentMeter: 124_880,
     vehicleType: {
-      minKmPerLiter: new Prisma.Decimal("2.00"),
-      maxKmPerLiter: new Prisma.Decimal("6.00"),
+      meterType: "DISTANCE",
+      minEfficiency: new Prisma.Decimal("2.00"),
+      maxEfficiency: new Prisma.Decimal("6.00"),
     },
     ...overrides,
   };
+}
+
+/** A DIESEL forklift (HOURS meter, band 0.8–2.5 hrs/L). */
+function makeForklift(overrides: Record<string, unknown> = {}) {
+  return makeVehicle({
+    id: "veh-fl",
+    plateNumber: "FL-2201",
+    currentMeter: 3_420,
+    vehicleType: {
+      meterType: "HOURS",
+      minEfficiency: new Prisma.Decimal("0.80"),
+      maxEfficiency: new Prisma.Decimal("2.50"),
+    },
+    ...overrides,
+  });
+}
+
+/** A DIESEL generator (ENERGY meter, band 2.5–4.0 kWh/L). */
+function makeGenerator(overrides: Record<string, unknown> = {}) {
+  return makeVehicle({
+    id: "veh-gen",
+    plateNumber: "GEN-01",
+    currentMeter: 128_400,
+    vehicleType: {
+      meterType: "ENERGY",
+      minEfficiency: new Prisma.Decimal("2.50"),
+      maxEfficiency: new Prisma.Decimal("4.00"),
+    },
+    ...overrides,
+  });
 }
 
 const validInput = {
   vehicleId: "veh-1",
   idempotencyKey: "9b8d1e42-77aa-4f4e-8c53-2f1e9d3c4a55",
   liters: 42,
-  odometer: 125_120,
+  meterReading: 125_120,
 };
 
 beforeEach(() => {
@@ -93,7 +127,7 @@ beforeEach(() => {
     currentStock: new Prisma.Decimal("2438.00"),
   });
   mockDb.fuelTransaction.create.mockImplementation((args: { data: Record<string, unknown> }) =>
-    Promise.resolve({ id: "tx-1", odometerOverride: false, ...args.data }),
+    Promise.resolve({ id: "tx-1", meterOverride: false, ...args.data }),
   );
   mockDb.$transaction.mockImplementation(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb));
 });
@@ -112,13 +146,50 @@ describe("submitFuelIssue — hard blocks (no writes)", () => {
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
 
-  it("blocks an odometer regression before any transaction", async () => {
-    const result = await submitFuelIssue(operator, { ...validInput, odometer: 124_100 });
+  it("blocks a meter regression before any transaction (DISTANCE)", async () => {
+    const result = await submitFuelIssue(operator, { ...validInput, meterReading: 124_100 });
 
     expect(result).toEqual({
-      outcome: "ODOMETER_BLOCKED",
-      previousOdometer: 124_880,
-      attemptedOdometer: 124_100,
+      outcome: "METER_BLOCKED",
+      meterType: "DISTANCE",
+      previousReading: 124_880,
+      attemptedReading: 124_100,
+    });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks a meter regression identically for an HOURS vehicle", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeForklift());
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-fl",
+      meterReading: 3_400,
+    });
+
+    expect(result).toEqual({
+      outcome: "METER_BLOCKED",
+      meterType: "HOURS",
+      previousReading: 3_420,
+      attemptedReading: 3_400,
+    });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks a meter regression identically for an ENERGY vehicle", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeGenerator());
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-gen",
+      meterReading: 128_000,
+    });
+
+    expect(result).toEqual({
+      outcome: "METER_BLOCKED",
+      meterType: "ENERGY",
+      previousReading: 128_400,
+      attemptedReading: 128_000,
     });
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
@@ -151,7 +222,8 @@ describe("submitFuelIssue — success path", () => {
     if (result.outcome !== "SUCCESS") return;
     expect(result.replayed).toBe(false);
     expect(result.receipt.balanceAfterLiters).toBe(2438);
-    expect(result.receipt.kmPerLiter).toBeNull(); // first fill
+    expect(result.receipt.efficiency).toBeNull(); // first fill
+    expect(result.receipt.meterType).toBe("DISTANCE");
 
     expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
     const movementArg = mockDb.stockMovement.create.mock.calls[0]?.[0] as {
@@ -168,7 +240,7 @@ describe("submitFuelIssue — success path", () => {
     expect(movementArg.data.fuelTransactionId).toBe("tx-1");
 
     expect(mockDb.vehicle.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { currentOdometer: 125_120 } }),
+      expect.objectContaining({ data: { currentMeter: 125_120 } }),
     );
     expect(mockDb.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: "FUEL_ISSUED" }) }),
@@ -178,7 +250,7 @@ describe("submitFuelIssue — success path", () => {
   it("computes efficiency from the previous fill and flags abnormal outside the band", async () => {
     // Previous fill: 10 L at 124,880 km. Now 125,120 -> 240 km / 10 L = 24 km/L > 6.
     mockDb.fuelTransaction.findFirst.mockResolvedValue({
-      odometer: 124_880,
+      meterReading: 124_880,
       liters: new Prisma.Decimal("10.00"),
     });
 
@@ -186,26 +258,74 @@ describe("submitFuelIssue — success path", () => {
 
     expect(result.outcome).toBe("SUCCESS");
     const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
-      data: { kmPerLiter: Prisma.Decimal | null; isAbnormal: boolean };
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
     };
-    expect(createArg.data.kmPerLiter?.toNumber()).toBe(24);
+    expect(createArg.data.efficiency?.toNumber()).toBe(24);
     expect(createArg.data.isAbnormal).toBe(true);
   });
 
   it("stays normal inside the band", async () => {
     // 240 km / 42 L = 5.71 km/L, inside 2..6.
     mockDb.fuelTransaction.findFirst.mockResolvedValue({
-      odometer: 124_880,
+      meterReading: 124_880,
       liters: new Prisma.Decimal("42.00"),
     });
 
     await submitFuelIssue(operator, validInput);
 
     const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
-      data: { kmPerLiter: Prisma.Decimal | null; isAbnormal: boolean };
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
     };
-    expect(createArg.data.kmPerLiter?.toNumber()).toBe(5.71);
+    expect(createArg.data.efficiency?.toNumber()).toBe(5.71);
     expect(createArg.data.isAbnormal).toBe(false);
+  });
+
+  it("computes hrs/L for an HOURS vehicle with the same code path and band logic", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeForklift());
+    // Previous fill: 10 L at 3,420 hrs. Now 3,432 -> 12 hrs / 10 L = 1.20 hrs/L (in band).
+    mockDb.fuelTransaction.findFirst.mockResolvedValue({
+      meterReading: 3_420,
+      liters: new Prisma.Decimal("10.00"),
+    });
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-fl",
+      meterReading: 3_432,
+    });
+
+    expect(result.outcome).toBe("SUCCESS");
+    if (result.outcome !== "SUCCESS") return;
+    expect(result.receipt.meterType).toBe("HOURS");
+    const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
+    };
+    expect(createArg.data.efficiency?.toNumber()).toBe(1.2);
+    expect(createArg.data.isAbnormal).toBe(false);
+  });
+
+  it("computes kWh/L for an ENERGY vehicle and flags outside the band", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeGenerator());
+    // Previous fill: 100 L at 128,400 kWh. Now 128,600 -> 200 kWh / 100 L = 2.00 kWh/L < 2.5.
+    mockDb.fuelTransaction.findFirst.mockResolvedValue({
+      meterReading: 128_400,
+      liters: new Prisma.Decimal("100.00"),
+    });
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-gen",
+      meterReading: 128_600,
+    });
+
+    expect(result.outcome).toBe("SUCCESS");
+    if (result.outcome !== "SUCCESS") return;
+    expect(result.receipt.meterType).toBe("ENERGY");
+    const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
+    };
+    expect(createArg.data.efficiency?.toNumber()).toBe(2);
+    expect(createArg.data.isAbnormal).toBe(true);
   });
 });
 
@@ -215,12 +335,12 @@ describe("submitFuelIssue — idempotency", () => {
       id: "tx-original",
       operatorId: "op-1",
       liters: new Prisma.Decimal("42.00"),
-      odometer: 125_120,
-      kmPerLiter: null,
+      meterReading: 125_120,
+      efficiency: null,
       isAbnormal: false,
-      odometerOverride: false,
+      meterOverride: false,
       issuedAt: new Date("2026-07-03T04:00:00Z"),
-      vehicle: { plateNumber: "CAB-4587" },
+      vehicle: { plateNumber: "CAB-4587", vehicleType: { meterType: "DISTANCE" } },
       tank: { name: "Tank A" },
       movement: { balanceAfter: new Prisma.Decimal("2438.00") },
     });
@@ -239,7 +359,7 @@ describe("submitFuelIssue — idempotency", () => {
     mockDb.fuelTransaction.findUnique.mockResolvedValue({
       id: "tx-foreign",
       operatorId: "someone-else",
-      vehicle: { plateNumber: "X" },
+      vehicle: { plateNumber: "X", vehicleType: { meterType: "DISTANCE" } },
       tank: { name: "Y" },
       movement: null,
     });
@@ -250,33 +370,51 @@ describe("submitFuelIssue — idempotency", () => {
   });
 });
 
-describe("flagOdometerException", () => {
+describe("flagMeterException", () => {
   it("creates a PENDING exception with liters and audits it", async () => {
-    mockDb.odometerException.create.mockResolvedValue({ id: "exc-1" });
+    mockDb.meterException.create.mockResolvedValue({ id: "exc-1" });
 
-    const result = await flagOdometerException(operator, {
+    const result = await flagMeterException(operator, {
       vehicleId: "veh-1",
-      attemptedOdometer: 124_100,
+      attemptedReading: 124_100,
       liters: 25,
     });
 
     expect(result).toEqual({ exceptionId: "exc-1" });
-    const createArg = mockDb.odometerException.create.mock.calls[0]?.[0] as {
-      data: { liters: Prisma.Decimal; previousOdometer: number; attemptedOdometer: number };
+    const createArg = mockDb.meterException.create.mock.calls[0]?.[0] as {
+      data: { liters: Prisma.Decimal; previousReading: number; attemptedReading: number };
     };
     expect(createArg.data.liters.toNumber()).toBe(25);
-    expect(createArg.data.previousOdometer).toBe(124_880);
-    expect(createArg.data.attemptedOdometer).toBe(124_100);
+    expect(createArg.data.previousReading).toBe(124_880);
+    expect(createArg.data.attemptedReading).toBe(124_100);
     expect(mockDb.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ action: "ODOMETER_EXCEPTION_FLAGGED" }),
+        data: expect.objectContaining({ action: "METER_EXCEPTION_FLAGGED" }),
       }),
     );
     expect(mockDb.$transaction).not.toHaveBeenCalled(); // no ledger write on flag
   });
+
+  it("works identically for a non-DISTANCE vehicle", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeForklift());
+    mockDb.meterException.create.mockResolvedValue({ id: "exc-fl" });
+
+    const result = await flagMeterException(operator, {
+      vehicleId: "veh-fl",
+      attemptedReading: 3_400,
+      liters: 12,
+    });
+
+    expect(result).toEqual({ exceptionId: "exc-fl" });
+    const createArg = mockDb.meterException.create.mock.calls[0]?.[0] as {
+      data: { previousReading: number; attemptedReading: number };
+    };
+    expect(createArg.data.previousReading).toBe(3_420);
+    expect(createArg.data.attemptedReading).toBe(3_400);
+  });
 });
 
-describe("reviewOdometerException", () => {
+describe("reviewMeterException", () => {
   function makePendingException(overrides: Record<string, unknown> = {}) {
     return {
       id: "exc-1",
@@ -285,8 +423,8 @@ describe("reviewOdometerException", () => {
       tankId: "tank-1",
       operatorId: "op-1",
       liters: new Prisma.Decimal("25.00"),
-      previousOdometer: 124_880,
-      attemptedOdometer: 124_100,
+      previousReading: 124_880,
+      attemptedReading: 124_100,
       createdAt: new Date("2026-07-03T04:00:00Z"),
       vehicle: makeVehicle(),
       tank: makeTank(),
@@ -295,64 +433,92 @@ describe("reviewOdometerException", () => {
   }
 
   it("APPROVE creates the override transaction + movement atomically", async () => {
-    mockDb.odometerException.findUnique.mockResolvedValue(makePendingException());
-    mockDb.odometerException.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.meterException.findUnique.mockResolvedValue(makePendingException());
+    mockDb.meterException.updateMany.mockResolvedValue({ count: 1 });
     mockDb.tank.findUniqueOrThrow.mockResolvedValue({
       currentStock: new Prisma.Decimal("2455.00"),
     });
 
-    const result = await reviewOdometerException("admin-1", {
+    const result = await reviewMeterException("admin-1", {
       exceptionId: "exc-1",
       decision: "APPROVE",
-      correctedOdometer: 125_140,
+      correctedReading: 125_140,
       reason: "Operator entered the previous reading in error.",
     });
 
     expect(result).toMatchObject({ decision: "APPROVE", transactionId: "tx-1" });
     const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
       data: {
-        odometerOverride: boolean;
+        meterOverride: boolean;
         overrideByUserId: string;
         operatorId: string;
-        odometer: number;
+        meterReading: number;
       };
     };
-    expect(createArg.data.odometerOverride).toBe(true);
+    expect(createArg.data.meterOverride).toBe(true);
     expect(createArg.data.overrideByUserId).toBe("admin-1");
     expect(createArg.data.operatorId).toBe("op-1"); // credited to the operator
-    expect(createArg.data.odometer).toBe(125_140);
+    expect(createArg.data.meterReading).toBe(125_140);
 
     expect(mockDb.stockMovement.create).toHaveBeenCalledTimes(1);
     expect(mockDb.vehicle.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { currentOdometer: 125_140 } }),
+      expect.objectContaining({ data: { currentMeter: 125_140 } }),
     );
 
     const auditActions = mockDb.auditLog.create.mock.calls.map(
       (call) => (call[0] as { data: { action: string } }).data.action,
     );
-    expect(auditActions).toContain("ODOMETER_OVERRIDE");
-    expect(auditActions).toContain("ODOMETER_EXCEPTION_REVIEWED");
+    expect(auditActions).toContain("METER_OVERRIDE");
+    expect(auditActions).toContain("METER_EXCEPTION_REVIEWED");
   });
 
-  it("APPROVE rejects a corrected odometer below the vehicle's current reading", async () => {
-    mockDb.odometerException.findUnique.mockResolvedValue(makePendingException());
+  it("APPROVE rejects a corrected reading below the vehicle's current reading", async () => {
+    mockDb.meterException.findUnique.mockResolvedValue(makePendingException());
 
     await expect(
-      reviewOdometerException("admin-1", {
+      reviewMeterException("admin-1", {
         exceptionId: "exc-1",
         decision: "APPROVE",
-        correctedOdometer: 124_000,
+        correctedReading: 124_000,
         reason: "Attempting an invalid correction.",
       }),
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
 
-  it("REJECT records the decision without any ledger write", async () => {
-    mockDb.odometerException.findUnique.mockResolvedValue(makePendingException());
-    mockDb.odometerException.updateMany.mockResolvedValue({ count: 1 });
+  it("APPROVE works identically for an HOURS vehicle", async () => {
+    mockDb.meterException.findUnique.mockResolvedValue(
+      makePendingException({
+        id: "exc-fl",
+        vehicleId: "veh-fl",
+        previousReading: 3_420,
+        attemptedReading: 3_400,
+        vehicle: makeForklift(),
+      }),
+    );
+    mockDb.meterException.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.tank.findUniqueOrThrow.mockResolvedValue({
+      currentStock: new Prisma.Decimal("2455.00"),
+    });
 
-    const result = await reviewOdometerException("admin-1", {
+    const result = await reviewMeterException("admin-1", {
+      exceptionId: "exc-fl",
+      decision: "APPROVE",
+      correctedReading: 3_430,
+      reason: "Hour meter photo verified by supervisor.",
+    });
+
+    expect(result).toMatchObject({ decision: "APPROVE", transactionId: "tx-1" });
+    expect(mockDb.vehicle.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { currentMeter: 3_430 } }),
+    );
+  });
+
+  it("REJECT records the decision without any ledger write", async () => {
+    mockDb.meterException.findUnique.mockResolvedValue(makePendingException());
+    mockDb.meterException.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await reviewMeterException("admin-1", {
       exceptionId: "exc-1",
       decision: "REJECT",
       reason: "Reading could not be verified.",
@@ -364,12 +530,12 @@ describe("reviewOdometerException", () => {
   });
 
   it("refuses to review an already-reviewed exception", async () => {
-    mockDb.odometerException.findUnique.mockResolvedValue(
+    mockDb.meterException.findUnique.mockResolvedValue(
       makePendingException({ status: "APPROVED" }),
     );
 
     await expect(
-      reviewOdometerException("admin-1", {
+      reviewMeterException("admin-1", {
         exceptionId: "exc-1",
         decision: "REJECT",
         reason: "Double review attempt.",

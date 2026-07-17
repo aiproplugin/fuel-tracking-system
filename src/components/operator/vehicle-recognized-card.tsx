@@ -1,9 +1,11 @@
 "use client";
 
 import type { LookupFound } from "@/components/operator/scan-flow";
+import { QuotaStatusLine } from "@/components/operator/quota-status-line";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, formatKilometers, formatLiters } from "@/lib/format";
+import { formatDateTime, formatLiters } from "@/lib/format";
+import { METER_CONFIG, formatMeter } from "@/lib/meter";
 
 /**
  * M4_VehicleRecognized — plate revealed after a successful lookup, with the
@@ -32,8 +34,12 @@ export function VehicleRecognizedCard({
       </div>
 
       <div className="rounded-[24px] border border-border bg-card p-5">
-        <p className="text-sm text-muted">Plate number</p>
-        <h1 className="mt-1 text-3xl font-extrabold">{vehicle.plateNumber}</h1>
+        <p className="text-sm text-muted">Plate number · Company</p>
+        <h1 className="mt-1 text-3xl font-extrabold">
+          {vehicle.plateNumber}
+          <span className="font-semibold text-muted"> · {vehicle.companyName}</span>
+        </h1>
+        <QuotaStatusLine quota={lookup.quota} className="mt-2" />
         <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-muted">Vehicle type</p>
@@ -44,8 +50,12 @@ export function VehicleRecognizedCard({
             <p className="mt-1 font-semibold">{fuelLabel}</p>
           </div>
           <div>
-            <p className="text-muted">Last odometer</p>
-            <p className="mt-1 font-semibold">{formatKilometers(vehicle.currentOdometer)}</p>
+            <p className="text-muted">
+              Last {METER_CONFIG[vehicle.meterType].meterLabel.toLowerCase()}
+            </p>
+            <p className="mt-1 font-semibold">
+              {formatMeter(vehicle.currentMeter, vehicle.meterType)}
+            </p>
           </div>
           <div>
             <p className="text-muted">Last issue</p>

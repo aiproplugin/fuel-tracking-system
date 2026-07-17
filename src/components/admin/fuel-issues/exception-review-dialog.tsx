@@ -12,24 +12,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatKilometers, formatLiters } from "@/lib/format";
+import { formatLiters } from "@/lib/format";
+import { METER_CONFIG, formatMeter, type MeterTypeName } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
 export interface PendingException {
   id: string;
   plateNumber: string;
+  meterType: MeterTypeName;
   tankName: string;
   operatorName: string;
   liters: number;
-  previousOdometer: number;
-  attemptedOdometer: number;
+  previousReading: number;
+  attemptedReading: number;
   createdAt: Date | string;
 }
 
 /**
- * D6_OdometerExceptionReview — ADMIN approves a corrected entry (creating
+ * D6_MeterExceptionReview — ADMIN approves a corrected entry (creating
  * the override-flagged transaction and its ledger movement) or rejects.
- * Reason is mandatory either way and lands in the audit trail.
+ * Reason is mandatory either way and lands in the audit trail. Labels and
+ * units follow the vehicle's meter type (km / hrs / kWh).
  */
 export function ExceptionReviewDialog({
   exception,
@@ -57,8 +60,10 @@ export function ExceptionReviewDialog({
     onError: (error) => setErrorMessage(error.message),
   });
 
+  const meter = exception ? METER_CONFIG[exception.meterType] : null;
+
   function review(decision: "APPROVE" | "REJECT") {
-    if (!exception) return;
+    if (!exception || !meter) return;
     setErrorMessage(null);
     if (reason.trim().length < 5) {
       setErrorMessage("A reason of at least 5 characters is required.");
@@ -66,13 +71,13 @@ export function ExceptionReviewDialog({
     }
     const corrected = Number(correctedText);
     if (decision === "APPROVE" && (!Number.isInteger(corrected) || corrected < 0)) {
-      setErrorMessage("Enter the corrected odometer in whole kilometers.");
+      setErrorMessage(`Enter the corrected reading in whole ${meter.unit}.`);
       return;
     }
     reviewMutation.mutate({
       exceptionId: exception.id,
       decision,
-      ...(decision === "APPROVE" ? { correctedOdometer: corrected } : {}),
+      ...(decision === "APPROVE" ? { correctedReading: corrected } : {}),
       reason: reason.trim(),
     });
   }
@@ -83,12 +88,12 @@ export function ExceptionReviewDialog({
         <DialogHeader>
           <DialogTitle>Exception review</DialogTitle>
           <DialogDescription>
-            Approving records the blocked fuel issue with the corrected odometer as an audited
+            Approving records the blocked fuel issue with the corrected meter reading as an audited
             override. Rejecting records the decision and writes nothing to the ledger.
           </DialogDescription>
         </DialogHeader>
 
-        {exception ? (
+        {exception && meter ? (
           <div className="space-y-4">
             <div className="space-y-2 rounded-2xl border border-border bg-slate-50 p-4 text-sm">
               <div className="flex justify-between">
@@ -96,15 +101,15 @@ export function ExceptionReviewDialog({
                 <span className="font-semibold">{exception.plateNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span>Previous odometer</span>
+                <span>Previous {meter.meterLabel.toLowerCase()}</span>
                 <span className="font-semibold">
-                  {formatKilometers(exception.previousOdometer)}
+                  {formatMeter(exception.previousReading, exception.meterType)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Attempted</span>
                 <span className="font-semibold text-danger">
-                  {formatKilometers(exception.attemptedOdometer)}
+                  {formatMeter(exception.attemptedReading, exception.meterType)}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -122,16 +127,18 @@ export function ExceptionReviewDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="corrected-odometer">Corrected odometer (km)</Label>
+              <Label htmlFor="corrected-reading">
+                Corrected {meter.meterLabel.toLowerCase()} ({meter.unit})
+              </Label>
               <Input
-                id="corrected-odometer"
+                id="corrected-reading"
                 type="number"
                 inputMode="numeric"
-                min={exception.previousOdometer}
+                min={exception.previousReading}
                 step={1}
                 value={correctedText}
                 onChange={(event) => setCorrectedText(event.target.value)}
-                placeholder={String(exception.previousOdometer)}
+                placeholder={String(exception.previousReading)}
               />
               <p className="text-xs text-muted">
                 Must be at least the vehicle&apos;s current reading. Required to approve.
