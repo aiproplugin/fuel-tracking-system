@@ -5,12 +5,7 @@ import {
   reviewMeterExceptionSchema,
   submitFuelIssueSchema,
 } from "@/lib/schemas/fuel-issue";
-import {
-  adminProcedure,
-  createTRPCRouter,
-  operatorProcedure,
-  supervisorProcedure,
-} from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import {
   flagMeterException,
   getOperatorDay,
@@ -22,33 +17,37 @@ import {
 } from "@/server/services/fuel-issue.service";
 
 /**
- * Fuel entry core. Operator procedures take the tank from the SESSION —
- * there is no tank input anywhere in this router. Review authority is
- * ADMIN-only per the meter rule.
+ * Fuel entry core. The issuing procedures take the tank from the SESSION —
+ * there is no tank input anywhere in this router — and fuel.issue is only ever
+ * assignable to a user with a bound tank (guardrail), so the actor always has
+ * one here. Review authority is a separate, stronger permission per the meter
+ * rule: it is the ONLY override path for a blocked reading.
  */
 export const fuelIssuesRouter = createTRPCRouter({
   // Mutations (not queries) so react-query never caches or auto-retries them.
-  lookupVehicle: operatorProcedure
+  lookupVehicle: permissionProcedure("vehicle.lookup")
     .input(lookupVehicleSchema)
-    .mutation(({ ctx, input }) => lookupVehicleForIssue(ctx.session.user, input)),
+    .mutation(({ ctx, input }) => lookupVehicleForIssue(ctx.actor, input)),
 
-  submit: operatorProcedure
+  submit: permissionProcedure("fuel.issue")
     .input(submitFuelIssueSchema)
-    .mutation(({ ctx, input }) => submitFuelIssue(ctx.session.user, input)),
+    .mutation(({ ctx, input }) => submitFuelIssue(ctx.actor, input)),
 
-  flagException: operatorProcedure
+  flagException: permissionProcedure("fuel.issue")
     .input(flagMeterExceptionSchema)
-    .mutation(({ ctx, input }) => flagMeterException(ctx.session.user, input)),
+    .mutation(({ ctx, input }) => flagMeterException(ctx.actor, input)),
 
-  myDay: operatorProcedure.query(({ ctx }) => getOperatorDay(ctx.session.user)),
+  myDay: permissionProcedure("report.view.own").query(({ ctx }) => getOperatorDay(ctx.actor)),
 
-  list: supervisorProcedure
+  list: permissionProcedure("fuelissue.view")
     .input(fuelIssueListSchema)
-    .query(({ ctx, input }) => listFuelIssues(ctx.session.user, input)),
+    .query(({ ctx, input }) => listFuelIssues(ctx.actor, input)),
 
-  exceptions: supervisorProcedure.query(({ ctx }) => listMeterExceptions(ctx.session.user)),
+  exceptions: permissionProcedure("fuelissue.view").query(({ ctx }) =>
+    listMeterExceptions(ctx.actor),
+  ),
 
-  reviewException: adminProcedure
+  reviewException: permissionProcedure("exception.review")
     .input(reviewMeterExceptionSchema)
-    .mutation(({ ctx, input }) => reviewMeterException(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => reviewMeterException(ctx.actor.id, input)),
 });

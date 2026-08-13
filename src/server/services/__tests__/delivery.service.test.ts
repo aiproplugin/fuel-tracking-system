@@ -15,9 +15,10 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import { createDelivery } from "@/server/services/delivery.service";
 import type { Actor } from "@/server/services/actor";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
-const supervisor: Actor = { id: "sup-1", role: "SUPERVISOR", siteId: "site-main" };
-const admin: Actor = { id: "adm-1", role: "ADMIN", siteId: null };
+const supervisor: Actor = testActor("SUPERVISOR", { id: "sup-1", siteId: "site-main" });
+const admin: Actor = testActor("ADMIN", { id: "adm-1" });
 
 function makeTank(overrides: Record<string, unknown> = {}) {
   return {

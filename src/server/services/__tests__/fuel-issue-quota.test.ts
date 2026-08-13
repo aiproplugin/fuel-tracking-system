@@ -24,6 +24,7 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import { submitFuelIssue, type OperatorActor } from "@/server/services/fuel-issue.service";
 import { hashOverrideCode } from "@/server/services/quota.service";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 
@@ -31,7 +32,11 @@ let actorCounter = 0;
 /** Fresh actor per test — the module-level rate limiters key on actor id. */
 function actor(): OperatorActor {
   actorCounter += 1;
-  return { id: `op-${actorCounter}`, role: "OPERATOR", siteId: "site-1", defaultTankId: "tank-1" };
+  return testActor("OPERATOR", {
+    id: `op-${actorCounter}`,
+    siteId: "site-1",
+    defaultTankId: "tank-1",
+  });
 }
 
 const TANK = {

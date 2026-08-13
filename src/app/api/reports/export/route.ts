@@ -4,9 +4,10 @@ import { exportQuerySchema } from "@/lib/schemas/reports";
 import { logger } from "@/lib/logger";
 import { auth } from "@/server/auth";
 import { clientIpFromHeaders, runWithRequestContext } from "@/server/context/request-context";
+import { db } from "@/server/db";
 import { exportRateLimiter } from "@/server/security/rate-limit";
-import type { Actor } from "@/server/services/actor";
 import { recordAuditEvent } from "@/server/services/audit.service";
+import { buildActor } from "@/server/services/permission.service";
 import { reportToCsv } from "@/server/services/reports/csv";
 import { REPORT_DESCRIPTORS } from "@/server/services/reports/report-registry";
 import { runReport } from "@/server/services/reports/report.service";
@@ -19,7 +20,6 @@ export const dynamic = "force-dynamic";
 /** Export row ceiling — larger than the on-screen cap, still bounded. */
 const EXPORT_ROW_LIMIT = 50_000;
 
-const ADMIN_ROLES = new Set(["SUPERVISOR", "MANAGER", "ADMIN"]);
 
 /**
  * Binary export endpoint for reports. SECURITY: authenticates via the server
@@ -37,7 +37,20 @@ export async function GET(request: Request): Promise<Response> {
     if (!session?.user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (session.user.mustChangePassword || !ADMIN_ROLES.has(session.user.role)) {
+    if (session.user.mustChangePassword) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    // Same permission model as tRPC: effective permissions are resolved
+    // server-side per request, so a revoked export right takes effect here
+    // immediately rather than at session expiry.
+    const actor = await buildActor(db, {
+      id: session.user.id,
+      role: session.user.role,
+      siteId: session.user.siteId ?? null,
+      defaultTankId: session.user.defaultTankId ?? null,
+    });
+    if (!actor.permissions.has("report.export")) {
       return new Response("Forbidden", { status: 403 });
     }
 
@@ -59,12 +72,6 @@ export async function GET(request: Request): Promise<Response> {
       if (query.format === "xlsx" && !descriptor.xlsx) {
         return new Response("XLSX export is not available for this report.", { status: 400 });
       }
-
-      const actor: Actor = {
-        id: session.user.id,
-        role: session.user.role,
-        siteId: session.user.siteId ?? null,
-      };
 
       const result = await runReport(
         actor,

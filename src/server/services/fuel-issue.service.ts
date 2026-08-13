@@ -60,9 +60,12 @@ function assertWithinLimit(limiter: ReturnType<typeof createRateLimiter>, key: s
 // ---------------------------------------------------------------------------
 
 /** Operator identity + the session-bound tank. The client never sends a tank. */
-export interface OperatorActor extends Actor {
-  defaultTankId: string | null;
-}
+/**
+ * Retained as a named alias for the fuel-entry flow. The bound tank now lives
+ * on the base Actor, so this adds no fields — it documents that these
+ * procedures operate on the actor's own tank.
+ */
+export type OperatorActor = Actor;
 
 export interface FuelIssueReceipt {
   transactionId: string;

@@ -50,6 +50,13 @@ enum MeterType {
   ENERGY // energy meter, kWh
 }
 
+// Direction of a per-user permission override. DENY always beats GRANT and
+// the role bundle alike (see resolveEffectivePermissions).
+enum PermissionMode {
+  GRANT
+  DENY
+}
+
 enum MovementType {
   ISSUE
   DELIVERY
@@ -135,6 +142,9 @@ enum AuditAction {
   QUOTA_OVERRIDE_CODE_ISSUED
   QUOTA_OVERRIDE
   QUOTA_TOPUP
+  PERMISSION_GRANTED
+  PERMISSION_DENIED
+  PERMISSION_OVERRIDE_REMOVED
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +217,39 @@ model User {
   quotaTopUpsGranted  QuotaTopUp[]        @relation("TopUpGrantedBy")
   overrideCodesIssued QuotaOverrideCode[] @relation("OverrideCodeIssuedBy")
 
+  permissionOverrides UserPermissionOverride[] @relation("UserOverrides")
+  permissionsGranted  UserPermissionOverride[] @relation("OverrideGrantedBy")
+
   @@map("app_user")
+}
+
+// Per-user deviation from the role's default permission bundle. A user with
+// no rows here has exactly their role's permissions — which is every user at
+// the moment this table is introduced, so behaviour is unchanged on deploy.
+//
+// The unique(user, permission) pair makes a simultaneous GRANT and DENY of the
+// same permission structurally impossible; the resolver in src/lib/permissions.ts
+// still applies denials last, so denials win under any circumstance.
+//
+// `permission` is a catalogue key from src/lib/permissions.ts, validated by Zod
+// on every write. It is deliberately NOT a Prisma enum: the catalogue lives in
+// exactly ONE module, and rows naming a retired key are ignored by the
+// resolver rather than widening anyone's access.
+model UserPermissionOverride {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  permission  String         @db.VarChar(64)
+  mode        PermissionMode
+  grantedById String         @map("granted_by")
+  reason      String         @db.VarChar(500)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User @relation("UserOverrides", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User @relation("OverrideGrantedBy", fields: [grantedById], references: [id])
+
+  @@unique([userId, permission])
+  @@index([userId])
+  @@map("user_permission_override")
 }
 
 // Optional and fully modeled; driver reports stay hidden until enabled.

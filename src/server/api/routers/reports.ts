@@ -1,6 +1,6 @@
 import { env } from "@/lib/env";
 import { reportFilterSchema, vehicleEfficiencyDetailSchema } from "@/lib/schemas/reports";
-import { createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import { availableReports } from "@/server/services/reports/report-registry";
 import { getVehicleEfficiencyDetail, runReport } from "@/server/services/reports/report.service";
 
@@ -8,23 +8,28 @@ import { getVehicleEfficiencyDetail, runReport } from "@/server/services/reports
 export const ON_SCREEN_ROW_LIMIT = 500;
 
 /**
- * Reports (supervisor+). Scoping and the driver-report feature gate live in the
- * service; this router only surfaces the catalogue, the on-screen run, and the
- * efficiency drill-down. Exports are served by the /api/reports/export route
- * handler (binary download), which calls the SAME service.
+ * Reports. `report.run` unlocks the capability; how MUCH data comes back is a
+ * separate question answered by the actor's report-scope permission
+ * (report.view.all vs report.view.site) inside the service. Exports are served
+ * by the /api/reports/export route handler (binary download), which calls the
+ * SAME service through the same permission checks.
  */
 export const reportsRouter = createTRPCRouter({
-  available: supervisorProcedure.query(() => availableReports(env.FEATURE_DRIVER_REPORTS)),
+  available: permissionProcedure("report.run").query(() =>
+    availableReports(env.FEATURE_DRIVER_REPORTS),
+  ),
 
-  run: supervisorProcedure.input(reportFilterSchema).query(({ ctx, input }) => {
-    const { reportKey, ...filters } = input;
-    return runReport(ctx.session.user, reportKey, filters, { rowLimit: ON_SCREEN_ROW_LIMIT });
-  }),
+  run: permissionProcedure("report.run")
+    .input(reportFilterSchema)
+    .query(({ ctx, input }) => {
+      const { reportKey, ...filters } = input;
+      return runReport(ctx.actor, reportKey, filters, { rowLimit: ON_SCREEN_ROW_LIMIT });
+    }),
 
-  vehicleDetail: supervisorProcedure
+  vehicleDetail: permissionProcedure("report.run")
     .input(vehicleEfficiencyDetailSchema)
     .query(({ ctx, input }) =>
-      getVehicleEfficiencyDetail(ctx.session.user, input.vehicleId, {
+      getVehicleEfficiencyDetail(ctx.actor, input.vehicleId, {
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
       }),

@@ -2,6 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the collaborators the route composes, so we test the SECURITY CONTRACT
 // (authn/authz, rate limit, session-derived scope, audit) — not report SQL.
+// The override lookup is real: the route resolves effective permissions per
+// request exactly as tRPC does, and returns no overrides here so each role
+// falls back to its default bundle.
+const { mockDb } = vi.hoisted(() => ({
+  mockDb: {
+    userPermissionOverride: {
+      findMany: vi.fn<() => Promise<Array<{ permission: string; mode: "GRANT" | "DENY" }>>>(() =>
+        Promise.resolve([]),
+      ),
+    },
+  },
+}));
+
+vi.mock("@/server/db", () => ({ db: mockDb }));
 vi.mock("@/server/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/server/services/reports/report.service", () => ({ runReport: vi.fn() }));
 vi.mock("@/server/services/audit.service", () => ({ recordAuditEvent: vi.fn() }));
@@ -56,6 +70,7 @@ describe("report export route — security contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     exportRateLimiter.reset();
+    mockDb.userPermissionOverride.findMany.mockResolvedValue([]);
     runReportMock.mockResolvedValue(RESULT);
     authMock.mockResolvedValue(sessionUser() as any);
   });
@@ -94,10 +109,26 @@ describe("report export route — security contract", () => {
     const res = await GET(request(`reportKey=vehicle-usage&format=csv&siteId=${SITE_SPOOFED}`));
     expect(res.status).toBe(200);
 
-    // Scope comes from the session, never the query string.
+    // Identity and scope come from the session, never the query string.
     expect(runReportMock).toHaveBeenCalledTimes(1);
     const actorArg = runReportMock.mock.calls[0]![0];
-    expect(actorArg).toEqual({ id: "u-sup", role: "SUPERVISOR", siteId: SITE_REAL });
+    expect(actorArg).toMatchObject({ id: "u-sup", role: "SUPERVISOR", siteId: SITE_REAL });
+    // …and the actor carries server-resolved permissions, so the service scopes
+    // on the same set that authorized the request.
+    expect(actorArg.permissions.has("report.export")).toBe(true);
+    expect(actorArg.permissions.has("report.view.site")).toBe(true);
+    expect(actorArg.permissions.has("report.view.all")).toBe(false);
+  });
+
+  it("403s a user whose report.export permission is revoked by override", async () => {
+    // Same session, same role — only the stored override differs, proving the
+    // route re-resolves permissions per request rather than trusting the JWT.
+    mockDb.userPermissionOverride.findMany.mockResolvedValue([
+      { permission: "report.export", mode: "DENY" },
+    ]);
+    const res = await GET(request("reportKey=vehicle-usage&format=csv"));
+    expect(res.status).toBe(403);
+    expect(runReportMock).not.toHaveBeenCalled();
   });
 
   it("records a REPORT_EXPORTED audit event on success", async () => {

@@ -1,15 +1,17 @@
 import { createTankSchema, updateTankSchema } from "@/lib/schemas/master-data";
-import { adminProcedure, createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import { createTank, getStockSummary, listTanks, updateTank } from "@/server/services/tank.service";
 
 export const tanksRouter = createTRPCRouter({
-  /** Supervisor sees own site only; manager/admin see all (service-side scoping). */
-  list: supervisorProcedure.query(({ ctx }) => listTanks(ctx.session.user)),
-  stockSummary: supervisorProcedure.query(({ ctx }) => getStockSummary(ctx.session.user)),
-  create: adminProcedure
+  /** Data scope follows the actor's report-scope permission (service-side). */
+  list: permissionProcedure("masterdata.view").query(({ ctx }) => listTanks(ctx.actor)),
+  stockSummary: permissionProcedure("masterdata.view").query(({ ctx }) =>
+    getStockSummary(ctx.actor),
+  ),
+  create: permissionProcedure("masterdata.manage")
     .input(createTankSchema)
-    .mutation(({ ctx, input }) => createTank(ctx.session.user.id, input)),
-  update: adminProcedure
+    .mutation(({ ctx, input }) => createTank(ctx.actor.id, input)),
+  update: permissionProcedure("masterdata.manage")
     .input(updateTankSchema)
-    .mutation(({ ctx, input }) => updateTank(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => updateTank(ctx.actor.id, input)),
 });

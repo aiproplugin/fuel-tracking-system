@@ -18,6 +18,7 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import { startOfColomboDay } from "@/lib/format";
 import type { Actor } from "@/server/services/actor";
+import { testActor } from "@/server/services/__tests__/test-actor";
 import {
   bulkAssignQuota,
   grantTopUp,
@@ -207,7 +208,7 @@ describe("grantTopUp", () => {
 });
 
 describe("issueOverrideCode", () => {
-  const supervisor: Actor = { id: "sup-1", role: "SUPERVISOR", siteId: "site-1" };
+  const supervisor: Actor = testActor("SUPERVISOR", { id: "sup-1", siteId: "site-1" });
 
   it("returns a 6-digit code once, stores only its hash, audits QUOTA_OVERRIDE_CODE_ISSUED", async () => {
     mockDb.vehicle.findUnique.mockResolvedValue({

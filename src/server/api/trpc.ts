@@ -1,10 +1,11 @@
 import { initTRPC, TRPCError } from "@trpc/server";
-import type { Role } from "@prisma/client";
 import superjson from "superjson";
 import { ZodError } from "zod";
 import { createRequestLogger } from "@/lib/logger";
+import type { Permission } from "@/lib/permissions";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
+import { buildActor } from "@/server/services/permission.service";
 
 /**
  * tRPC context — one per request. Carries the session, the Prisma client
@@ -78,30 +79,40 @@ export const protectedProcedure = sessionProcedure.use(({ ctx, next }) => {
 });
 
 /**
- * Role-gated procedure with an EXPLICIT allowlist (least privilege — no
- * implicit hierarchy, because e.g. adjustments allow SUPERVISOR and ADMIN
- * but not MANAGER). Ownership/data-scoping checks (operator=own tank,
- * supervisor=own site) are enforced per-procedure in the services on top
- * of this gate.
+ * PERMISSION-GATED PROCEDURE — the only authorization gate in the system.
  *
- * Usage: roleProcedure(["ADMIN"]).mutation(...)
+ * Each procedure declares the ONE permission it requires. The actor's
+ * effective permissions are resolved SERVER-SIDE on every call from their role
+ * bundle plus their per-user overrides (see permission.service.ts); the client
+ * is never consulted and the UI hiding a control is never load-bearing.
+ *
+ * Resolution is per request, not cached in the session: the JWT fixes the role
+ * at sign-in, so a session-cached permission set would leave a revoked
+ * permission live until the session expired.
+ *
+ * The resolved Actor is injected as `ctx.actor` — services take that, never
+ * `ctx.session.user`, so data scoping reads the same permission set that
+ * authorized the call.
+ *
+ * Usage: permissionProcedure("tank.manage").mutation(...)
  */
-export function roleProcedure(allowedRoles: readonly Role[]) {
-  return protectedProcedure.use(({ ctx, next }) => {
-    if (!allowedRoles.includes(ctx.session.user.role)) {
+export function permissionProcedure(permission: Permission) {
+  return protectedProcedure.use(async ({ ctx, next }) => {
+    const actor = await buildActor(ctx.db, {
+      id: ctx.session.user.id,
+      role: ctx.session.user.role,
+      siteId: ctx.session.user.siteId ?? null,
+      defaultTankId: ctx.session.user.defaultTankId ?? null,
+    });
+
+    if (!actor.permissions.has(permission)) {
       ctx.logger.warn(
-        { userId: ctx.session.user.id, role: ctx.session.user.role, allowedRoles },
-        "Forbidden: role not allowed for procedure",
+        { userId: actor.id, role: actor.role, permission },
+        "Forbidden: actor lacks required permission",
       );
       throw new TRPCError({ code: "FORBIDDEN" });
     }
-    return next();
+
+    return next({ ctx: { ...ctx, actor } });
   });
 }
-
-/** Convenience gates for the common cases. */
-export const adminProcedure = roleProcedure(["ADMIN"]);
-export const managerProcedure = roleProcedure(["MANAGER", "ADMIN"]);
-export const supervisorProcedure = roleProcedure(["SUPERVISOR", "MANAGER", "ADMIN"]);
-/** Fuel-entry flow: OPERATOR only — the role with a session-bound tank. */
-export const operatorProcedure = roleProcedure(["OPERATOR"]);

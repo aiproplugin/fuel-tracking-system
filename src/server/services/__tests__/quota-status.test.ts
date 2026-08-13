@@ -14,11 +14,12 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import { getQuotaStatus } from "@/server/services/quota.service";
 import type { Actor } from "@/server/services/actor";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
 
-const SUPERVISOR: Actor = { id: "sup-1", role: "SUPERVISOR", siteId: "site-1" };
-const MANAGER: Actor = { id: "man-1", role: "MANAGER", siteId: null };
+const SUPERVISOR: Actor = testActor("SUPERVISOR", { id: "sup-1", siteId: "site-1" });
+const MANAGER: Actor = testActor("MANAGER", { id: "man-1" });
 
 function vehicleRow(overrides: Record<string, unknown>) {
   return {

@@ -7,6 +7,7 @@ import { dashboardRouter } from "@/server/api/routers/dashboard";
 import { deliveriesRouter } from "@/server/api/routers/deliveries";
 import { fuelIssuesRouter } from "@/server/api/routers/fuel-issues";
 import { healthRouter } from "@/server/api/routers/health";
+import { permissionsRouter } from "@/server/api/routers/permissions";
 import { reconciliationRouter } from "@/server/api/routers/reconciliation";
 import { reportsRouter } from "@/server/api/routers/reports";
 import { qrTokensRouter } from "@/server/api/routers/qr-tokens";
@@ -39,6 +40,7 @@ export const appRouter = createTRPCRouter({
   users: usersRouter,
   qrTokens: qrTokensRouter,
   audit: auditRouter,
+  permissions: permissionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

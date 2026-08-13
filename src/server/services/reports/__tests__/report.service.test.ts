@@ -18,9 +18,10 @@ vi.mock("@/lib/env", () => ({ env: mockEnv }));
 
 import { runReport } from "@/server/services/reports/report.service";
 import type { Actor } from "@/server/services/actor";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
-const admin: Actor = { id: "adm-1", role: "ADMIN", siteId: null };
-const supervisor: Actor = { id: "sup-1", role: "SUPERVISOR", siteId: "site-a" };
+const admin: Actor = testActor("ADMIN", { id: "adm-1" });
+const supervisor: Actor = testActor("SUPERVISOR", { id: "sup-1", siteId: "site-a" });
 
 beforeEach(() => {
   vi.clearAllMocks();

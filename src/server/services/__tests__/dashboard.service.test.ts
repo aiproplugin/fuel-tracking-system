@@ -14,9 +14,10 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 
 import { getDashboardSummary } from "@/server/services/dashboard.service";
 import type { Actor } from "@/server/services/actor";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
-const admin: Actor = { id: "adm-1", role: "ADMIN", siteId: null };
-const supervisor: Actor = { id: "sup-1", role: "SUPERVISOR", siteId: "site-main" };
+const admin: Actor = testActor("ADMIN", { id: "adm-1" });
+const supervisor: Actor = testActor("SUPERVISOR", { id: "sup-1", siteId: "site-main" });
 
 // Fixed clock: 2026-07-03T06:00:00Z → Colombo midnight (todayStart) = 2026-07-02T18:30:00Z.
 const NOW = new Date("2026-07-03T06:00:00.000Z");

@@ -1,26 +1,17 @@
-import {
-  createSiteSchema,
-  deleteSiteSchema,
-  updateSiteSchema,
-} from "@/lib/schemas/master-data";
-import { adminProcedure, createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
-import {
-  createSite,
-  deleteSite,
-  listSites,
-  updateSite,
-} from "@/server/services/site.service";
+import { createSiteSchema, deleteSiteSchema, updateSiteSchema } from "@/lib/schemas/master-data";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
+import { createSite, deleteSite, listSites, updateSite } from "@/server/services/site.service";
 
 export const sitesRouter = createTRPCRouter({
-  /** Supervisor+ may read the site list (also feeds tank/user form dropdowns). */
-  list: supervisorProcedure.query(() => listSites()),
-  create: adminProcedure
+  /** Also feeds tank/user form dropdowns, hence the read-level permission. */
+  list: permissionProcedure("masterdata.view").query(() => listSites()),
+  create: permissionProcedure("masterdata.manage")
     .input(createSiteSchema)
-    .mutation(({ ctx, input }) => createSite(ctx.session.user.id, input)),
-  update: adminProcedure
+    .mutation(({ ctx, input }) => createSite(ctx.actor.id, input)),
+  update: permissionProcedure("masterdata.manage")
     .input(updateSiteSchema)
-    .mutation(({ ctx, input }) => updateSite(ctx.session.user.id, input)),
-  delete: adminProcedure
+    .mutation(({ ctx, input }) => updateSite(ctx.actor.id, input)),
+  delete: permissionProcedure("masterdata.manage")
     .input(deleteSiteSchema)
-    .mutation(({ ctx, input }) => deleteSite(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => deleteSite(ctx.actor.id, input)),
 });

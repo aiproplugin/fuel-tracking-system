@@ -5,41 +5,51 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { Role } from "@prisma/client";
 import { Logo } from "@/components/brand/logo";
+import type { Permission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
   label: string;
   href: string;
-  roles: readonly Role[];
+  /** The permission that gates the section's primary procedure. */
+  permission: Permission;
 }
 
-/** Nav order and labels from prototype D1; visibility per the role matrix. */
+/**
+ * Nav order and labels from prototype D1; visibility follows the SAME
+ * permission the section's procedures require, so a granted or denied
+ * override is reflected in the nav. Hiding is UX only — every procedure
+ * re-checks server-side.
+ */
 const NAV_ITEMS: readonly NavItem[] = [
-  { label: "Dashboard", href: "/admin", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Fuel Issues", href: "/admin/fuel-issues", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Deliveries", href: "/admin/deliveries", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Adjustments", href: "/admin/adjustments", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Vehicles", href: "/admin/vehicles", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Quotas", href: "/admin/quotas", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Companies", href: "/admin/companies", roles: ["ADMIN"] },
-  { label: "Sites", href: "/admin/sites", roles: ["ADMIN"] },
-  { label: "Tanks", href: "/admin/tanks", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Reports", href: "/admin/reports", roles: ["SUPERVISOR", "MANAGER", "ADMIN"] },
-  { label: "Users", href: "/admin/users", roles: ["ADMIN"] },
-  { label: "QR Tokens", href: "/admin/qr-tokens", roles: ["ADMIN"] },
-  { label: "Audit", href: "/admin/audit", roles: ["MANAGER", "ADMIN"] },
-  { label: "Settings", href: "/admin/settings", roles: ["ADMIN"] },
+  { label: "Dashboard", href: "/admin", permission: "dashboard.view" },
+  { label: "Fuel Issues", href: "/admin/fuel-issues", permission: "fuelissue.view" },
+  { label: "Deliveries", href: "/admin/deliveries", permission: "ledger.view" },
+  { label: "Adjustments", href: "/admin/adjustments", permission: "ledger.view" },
+  { label: "Vehicles", href: "/admin/vehicles", permission: "masterdata.view" },
+  { label: "Quotas", href: "/admin/quotas", permission: "quota.view" },
+  { label: "Companies", href: "/admin/companies", permission: "masterdata.manage" },
+  { label: "Sites", href: "/admin/sites", permission: "masterdata.manage" },
+  { label: "Tanks", href: "/admin/tanks", permission: "masterdata.view" },
+  { label: "Reports", href: "/admin/reports", permission: "report.run" },
+  { label: "Users", href: "/admin/users", permission: "user.manage" },
+  { label: "Access", href: "/admin/access", permission: "permission.manage" },
+  { label: "QR Tokens", href: "/admin/qr-tokens", permission: "qrtoken.manage" },
+  { label: "Audit", href: "/admin/audit", permission: "audit.view" },
+  { label: "Settings", href: "/admin/settings", permission: "masterdata.manage" },
 ];
 
 export interface SidebarNavProps {
+  permissions: readonly Permission[];
   role: Role;
   displayName: string;
   username: string;
 }
 
-export function SidebarNav({ role, displayName, username }: SidebarNavProps) {
+export function SidebarNav({ permissions, role, displayName, username }: SidebarNavProps) {
   const pathname = usePathname();
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const held = new Set(permissions);
+  const visibleItems = NAV_ITEMS.filter((item) => held.has(item.permission));
 
   function isActive(href: string): boolean {
     return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);

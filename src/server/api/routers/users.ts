@@ -5,7 +5,7 @@ import {
   unlockUserSchema,
   updateUserSchema,
 } from "@/lib/schemas/master-data";
-import { adminProcedure, createTRPCRouter } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import {
   assignTank,
   createUser,
@@ -15,22 +15,26 @@ import {
   updateUser,
 } from "@/server/services/user-admin.service";
 
-/** User management is ADMIN-only end to end (tank binding rule included). */
+/**
+ * User management. `user.manage` is a META-PERMISSION: it is reserved to the
+ * ADMIN role and can never be handed out by a per-user override, so no
+ * manager can grant themselves account control and escalate from there.
+ */
 export const usersRouter = createTRPCRouter({
-  list: adminProcedure.query(() => listUsers()),
-  create: adminProcedure
+  list: permissionProcedure("user.manage").query(() => listUsers()),
+  create: permissionProcedure("user.manage")
     .input(createUserSchema)
-    .mutation(({ ctx, input }) => createUser(ctx.session.user.id, input)),
-  update: adminProcedure
+    .mutation(({ ctx, input }) => createUser(ctx.actor.id, input)),
+  update: permissionProcedure("user.manage")
     .input(updateUserSchema)
-    .mutation(({ ctx, input }) => updateUser(ctx.session.user.id, input)),
-  assignTank: adminProcedure
+    .mutation(({ ctx, input }) => updateUser(ctx.actor.id, input)),
+  assignTank: permissionProcedure("user.manage")
     .input(assignTankSchema)
-    .mutation(({ ctx, input }) => assignTank(ctx.session.user.id, input)),
-  resetPassword: adminProcedure
+    .mutation(({ ctx, input }) => assignTank(ctx.actor.id, input)),
+  resetPassword: permissionProcedure("user.manage")
     .input(resetPasswordSchema)
-    .mutation(({ ctx, input }) => resetPassword(ctx.session.user.id, input)),
-  unlock: adminProcedure
+    .mutation(({ ctx, input }) => resetPassword(ctx.actor.id, input)),
+  unlock: permissionProcedure("user.manage")
     .input(unlockUserSchema)
-    .mutation(({ ctx, input }) => unlockUser(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => unlockUser(ctx.actor.id, input)),
 });

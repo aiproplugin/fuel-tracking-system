@@ -3,7 +3,7 @@ import {
   deleteCompanySchema,
   updateCompanySchema,
 } from "@/lib/schemas/company";
-import { adminProcedure, createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import {
   createCompany,
   deleteCompany,
@@ -12,14 +12,14 @@ import {
 } from "@/server/services/company.service";
 
 export const companiesRouter = createTRPCRouter({
-  list: supervisorProcedure.query(() => listCompanies()),
-  create: adminProcedure
+  list: permissionProcedure("masterdata.view").query(() => listCompanies()),
+  create: permissionProcedure("masterdata.manage")
     .input(createCompanySchema)
-    .mutation(({ ctx, input }) => createCompany(ctx.session.user.id, input)),
-  update: adminProcedure
+    .mutation(({ ctx, input }) => createCompany(ctx.actor.id, input)),
+  update: permissionProcedure("masterdata.manage")
     .input(updateCompanySchema)
-    .mutation(({ ctx, input }) => updateCompany(ctx.session.user.id, input)),
-  delete: adminProcedure
+    .mutation(({ ctx, input }) => updateCompany(ctx.actor.id, input)),
+  delete: permissionProcedure("masterdata.manage")
     .input(deleteCompanySchema)
-    .mutation(({ ctx, input }) => deleteCompany(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => deleteCompany(ctx.actor.id, input)),
 });

@@ -1,10 +1,10 @@
 import { upsertVehicleTypeSchema } from "@/lib/schemas/master-data";
-import { adminProcedure, createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import { listVehicleTypes, upsertVehicleType } from "@/server/services/vehicle-type.service";
 
 export const vehicleTypesRouter = createTRPCRouter({
-  list: supervisorProcedure.query(() => listVehicleTypes()),
-  upsert: adminProcedure
+  list: permissionProcedure("masterdata.view").query(() => listVehicleTypes()),
+  upsert: permissionProcedure("masterdata.manage")
     .input(upsertVehicleTypeSchema)
-    .mutation(({ ctx, input }) => upsertVehicleType(ctx.session.user.id, input)),
+    .mutation(({ ctx, input }) => upsertVehicleType(ctx.actor.id, input)),
 });

@@ -1,16 +1,17 @@
 import { z } from "zod";
 import { idSchema } from "@/lib/schemas/master-data";
 import { strictObject } from "@/lib/validation";
-import { adminProcedure, createTRPCRouter, supervisorProcedure } from "@/server/api/trpc";
+import { createTRPCRouter, permissionProcedure } from "@/server/api/trpc";
 import { repairTankCache, runReconciliation } from "@/server/services/reconciliation.service";
 
 /**
- * Ledger reconciliation. Read = SUPERVISOR+ (site-scoped). Cache repair =
- * ADMIN only, and only when the movement chain itself is intact.
+ * Ledger reconciliation. Reading is site-scoped in the service; cache repair
+ * is a separate, stronger permission and only runs when the movement chain
+ * itself is intact.
  */
 export const reconciliationRouter = createTRPCRouter({
-  run: supervisorProcedure.query(({ ctx }) => runReconciliation(ctx.session.user)),
-  repair: adminProcedure
+  run: permissionProcedure("reconcile.run").query(({ ctx }) => runReconciliation(ctx.actor)),
+  repair: permissionProcedure("reconcile.repair")
     .input(strictObject({ tankId: idSchema, confirm: z.literal(true) }))
-    .mutation(({ ctx, input }) => repairTankCache(ctx.session.user.id, input.tankId)),
+    .mutation(({ ctx, input }) => repairTankCache(ctx.actor.id, input.tankId)),
 });

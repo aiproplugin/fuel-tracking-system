@@ -40,13 +40,13 @@ import {
   submitFuelIssue,
   type OperatorActor,
 } from "@/server/services/fuel-issue.service";
+import { testActor } from "@/server/services/__tests__/test-actor";
 
-const operator: OperatorActor = {
+const operator: OperatorActor = testActor("OPERATOR", {
   id: "op-1",
-  role: "OPERATOR",
   siteId: "site-1",
   defaultTankId: "tank-1",
-};
+});
 
 function makeTank(overrides: Record<string, unknown> = {}) {
   return {

@@ -62,11 +62,37 @@ Every fuel-quantity change runs through the service layer inside ONE atomic Pris
 - **OUT OF SCOPE v1**: cost/currency (keep `unit_cost` column, hide in UI), offline, GPS, SSO
   (keep code SSO-ready).
 
-## Roles & authorization
+## Roles & authorization — PERMISSION-BASED (RBAC with per-user overrides)
 
-OPERATOR, SUPERVISOR, MANAGER, ADMIN — enforce via tRPC middleware on EVERY protected
-procedure (never trust the client). Data scoping: operator=own tank, supervisor=own site,
-manager/admin=all. Override authority: ADMIN only. Adjustments: SUPERVISOR or ADMIN.
+Authorization is by PERMISSION, never by role. The catalogue, the role bundles, the resolver,
+and the security invariants all live ONLY in `src/lib/permissions.ts` (completeness unit-tested);
+adding a permission = one catalogue entry + one config entry + a decision in every role bundle.
+
+- **Roles are DEFAULT BUNDLES**: OPERATOR, SUPERVISOR, MANAGER, ADMIN each name a set of
+  permissions. They are NOT hierarchical and must never be treated as nested: SUPERVISOR records
+  deliveries/adjustments and MANAGER does not; MANAGER reads the audit trail and SUPERVISOR does
+  not; fuel entry is OPERATOR-only, so ADMIN deliberately lacks `fuel.issue`.
+- **EFFECTIVE = (role defaults ∪ grants) − denials**, resolved by one pure function.
+  DENIALS ALWAYS WIN over grants and role alike. Overrides live in `user_permission_override`.
+- **RESOLVED PER REQUEST**, never cached in the JWT — a denial takes effect on the very next
+  request. `permissionProcedure("x")` is the ONLY gate; it injects `ctx.actor` (identity, site,
+  bound tank, resolved permissions). Services take `ctx.actor`, never `ctx.session.user`.
+- **NON-OVERRIDABLE INVARIANTS** (enforced on every override/role save, tested both directions):
+  1. SEGREGATION OF DUTIES: `fuel.issue` is mutually exclusive with `delivery.record` and with
+     `stock.adjust`. Evaluated on the RESULTING effective set, so denying one side legitimately
+     frees the other. No role bundle may violate this either (invariant test).
+  2. META-PERMISSIONS LOCKED: `user.manage` and `permission.manage` come only from the ADMIN
+     role and can NEVER be granted by override (blocks privilege escalation).
+  3. `fuel.issue` requires a bound `default_tank_id`.
+  4. The last active ADMIN can never lose `user.manage`/`permission.manage`, by override or by
+     role change (lockout guard).
+- **Data scoping follows permissions, not roles**: `report.view.all` > `report.view.site` >
+  neither (fails CLOSED). Operator=own tank via the session-bound tank.
+- The UI hides what the actor cannot use (sidebar + controls) — that is UX ONLY; the server
+  re-resolves and enforces on every call.
+- Every access change is audited: PERMISSION_GRANTED / PERMISSION_DENIED /
+  PERMISSION_OVERRIDE_REMOVED / ROLE_CHANGED, with actor, target, permission, and a REQUIRED
+  reason.
 
 ## SECURITY BY DESIGN (apply in every phase; verified in Phase 7)
 
@@ -117,7 +143,7 @@ Prototype screens to reproduce: M1 Login, M2 Operator Home, M3 QR Scanner, M4 Ve
 Recognized, M5 Fuel Issue Form, M6 Meter Blocked (drawn as "Odometer Blocked" in the prototype —
 same screen, meter-type-aware labels), M7 Fuel Type Mismatch, D1 Admin Dashboard, D3 Tank
 Detail, D6 Meter Exception Review, and the admin shell nav (Dashboard, Fuel Issues,
-Deliveries, Adjustments, Vehicles, Tanks, Users, QR Tokens, Audit, Settings). Screens implied
+Deliveries, Adjustments, Vehicles, Tanks, Users, Access, QR Tokens, Audit, Settings). Screens implied
 but not drawn (design in the SAME language): success receipt, delivery entry, adjustment flag,
 list views, CRUD forms, Users + tank assignment, QR token generate/print/rotate, audit trail,
 settings (per-vehicle-type meter type + efficiency bounds), per-vehicle efficiency report with
