@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FUEL_CONFIG, fuelLabel, type FuelTypeName } from "@/lib/fuel";
 import { formatMeter, type MeterTypeName } from "@/lib/meter";
 
 export interface VehicleRow {
@@ -26,7 +27,7 @@ export interface VehicleRow {
   vehicleType: { id: string; name: string; meterType: MeterTypeName };
   meterType: MeterTypeName;
   company: { id: string; name: string };
-  fuelType: "PETROL" | "DIESEL";
+  fuelType: FuelTypeName;
   currentMeter: number;
   quotaMode: "INHERIT" | "CUSTOM" | "EXEMPT";
   isActive: boolean;
@@ -53,8 +54,8 @@ export function VehicleTable({ vehicles, isLoading, canEdit, onEdit }: VehicleTa
     columnHelper.accessor("fuelType", {
       header: "Fuel",
       cell: (info) => (
-        <Badge variant={info.getValue() === "PETROL" ? "petrol" : "diesel"}>
-          {info.getValue() === "PETROL" ? "Petrol" : "Diesel"}
+        <Badge variant={FUEL_CONFIG[info.getValue()].badgeVariant}>
+          {fuelLabel(info.getValue())}
         </Badge>
       ),
     }),

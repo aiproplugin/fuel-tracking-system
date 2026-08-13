@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime, formatLiters } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { METER_CONFIG, formatEfficiencyFull, formatMeter } from "@/lib/meter";
 import type { VehicleEfficiencyDetail } from "@/server/services/reports/report.service";
 
@@ -23,7 +24,7 @@ import type { VehicleEfficiencyDetail } from "@/server/services/reports/report.s
  */
 export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficiencyDetail }) {
   const { vehicle, totals, fills } = detail;
-  const fuelVariant = vehicle.fuelType === "PETROL" ? "petrol" : "diesel";
+  const fuelVariant = FUEL_CONFIG[vehicle.fuelType].badgeVariant;
   const meter = METER_CONFIG[vehicle.meterType];
 
   return (
@@ -35,7 +36,7 @@ export function VehicleEfficiencyDetailView({ detail }: { detail: VehicleEfficie
         <PageHeader
           eyebrow="Efficiency drill-down"
           title={vehicle.plateNumber}
-          actions={<Badge variant={fuelVariant}>{vehicle.fuelType}</Badge>}
+          actions={<Badge variant={fuelVariant}>{fuelLabel(vehicle.fuelType)}</Badge>}
         />
         <p className="text-sm text-muted">
           {vehicle.vehicleType} · current {meter.meterLabel.toLowerCase()}{" "}

@@ -9,6 +9,7 @@ import { ExceptionQueue } from "@/components/admin/dashboard/exception-queue";
 import { RecentTransactions } from "@/components/admin/dashboard/recent-transactions";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { formatLiters } from "@/lib/format";
+import { FUEL_TYPES, fuelLabel } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
 import type { DashboardRange } from "@/lib/schemas/dashboard";
 import type { TankReconciliation } from "@/server/services/reconciliation.service";
@@ -53,10 +54,16 @@ export function DashboardClient({
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label={volumeLabel} value={show(formatLiters(kpis?.volumeLiters ?? 0))} />
-        <KpiCard label="Petrol stock" value={show(formatLiters(kpis?.petrolStockLiters ?? 0))} />
-        <KpiCard label="Diesel stock" value={show(formatLiters(kpis?.dieselStockLiters ?? 0))} />
+        {/* One stock card per fuel type — never a cross-type total. */}
+        {FUEL_TYPES.map((fuelType) => (
+          <KpiCard
+            key={fuelType}
+            label={`${fuelLabel(fuelType)} stock`}
+            value={show(formatLiters(kpis?.stockByFuelType[fuelType] ?? 0))}
+          />
+        ))}
         <KpiCard
           label="Low-stock tanks"
           value={show(String(kpis?.lowStockTanks ?? 0))}

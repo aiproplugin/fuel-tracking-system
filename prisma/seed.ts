@@ -95,7 +95,20 @@ async function seedTanks(siteIds: { mainDepot: string; northYard: string }) {
       lowStockThreshold: new Prisma.Decimal("1500"),
     },
   });
-  return { tankA, tankB, tankC };
+  // Kerosene pump — a KEROSENE vehicle may only draw from here, and no
+  // petrol/diesel vehicle may draw from it (FUEL_TYPE_MISMATCH hard block).
+  const tankD = await prisma.tank.upsert({
+    where: { name: "Tank D" },
+    update: {},
+    create: {
+      name: "Tank D",
+      siteId: siteIds.northYard,
+      fuelType: FuelType.KEROSENE,
+      capacityLiters: new Prisma.Decimal("2000"),
+      lowStockThreshold: new Prisma.Decimal("400"),
+    },
+  });
+  return { tankA, tankB, tankC, tankD };
 }
 
 async function seedUsers(ids: { mainDepotId: string; tankAId: string; tankBId: string }) {
@@ -186,6 +199,7 @@ async function seedVehicleTypesAndVehicles(companyIds: {
     { name: "Car", meterType: MeterType.DISTANCE, min: "8.00", max: "18.00" },
     { name: "Forklift", meterType: MeterType.HOURS, min: "0.80", max: "2.50" },
     { name: "Generator", meterType: MeterType.ENERGY, min: "2.50", max: "4.00" },
+    { name: "Kerosene Burner", meterType: MeterType.HOURS, min: "0.50", max: "1.60" },
   ];
   const typeIds: Record<string, string> = {};
   for (const type of types) {
@@ -255,6 +269,13 @@ async function seedVehicleTypesAndVehicles(companyIds: {
       type: "Generator",
       fuelType: FuelType.DIESEL,
       meter: 128_400,
+      companyId: companyIds.multilac,
+    },
+    {
+      plate: "KB-0450",
+      type: "Kerosene Burner",
+      fuelType: FuelType.KEROSENE,
+      meter: 1_180,
       companyId: companyIds.multilac,
     },
   ];
@@ -350,7 +371,7 @@ async function main() {
     mandarina: companies.Mandarina.id,
   };
   const { mainDepot, northYard } = await seedSites(companyIds);
-  const { tankA, tankB, tankC } = await seedTanks({
+  const { tankA, tankB, tankC, tankD } = await seedTanks({
     mainDepot: mainDepot.id,
     northYard: northYard.id,
   });
@@ -369,11 +390,12 @@ async function main() {
     { id: tankA.id, liters: "2480.00" },
     { id: tankB.id, liters: "1850.00" },
     { id: tankC.id, liters: "5200.00" },
+    { id: tankD.id, liters: "960.00" },
   ]);
 
   // eslint-disable-next-line no-console -- CLI script, not app runtime
   console.log(
-    "Seed complete: 3 companies, 2 sites, 3 tanks, 5 users, 6 vehicle types, 6 vehicles.",
+    "Seed complete: 3 companies, 2 sites, 4 tanks, 5 users, 7 vehicle types, 7 vehicles.",
   );
 }
 

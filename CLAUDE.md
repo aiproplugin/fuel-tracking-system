@@ -25,8 +25,11 @@ Every fuel-quantity change runs through the service layer inside ONE atomic Pris
 - **STOCK LEDGER IS SACRED**: every fuel issue, delivery, and adjustment creates exactly one
   `stock_movement` row storing `balance_after`. `tank.current_stock` is a cached value that must
   always equal the latest movement's `balance_after`. Provide a reconciliation command/check.
-- **FUEL TYPES**: enum `FuelType { PETROL, DIESEL }`. Each tank and each vehicle has exactly one.
-  A fuel issue is HARD-BLOCKED if `vehicle.fuelType != tank.fuelType` (red mismatch screen).
+- **FUEL TYPES**: enum `FuelType { PETROL, DIESEL, KEROSENE }`. Each tank and each vehicle has
+  exactly one. A fuel issue is HARD-BLOCKED if `vehicle.fuelType != tank.fuelType` (red mismatch
+  screen) — the check is a plain inequality, so it holds for every type and pair. All fuel
+  labels and chip variants live ONLY in `src/lib/fuel.ts` (`FUEL_CONFIG`, `FUEL_TYPES`); adding
+  a fuel type = one enum value + one config entry (never a `=== "PETROL" ? … : …` ternary).
 - **TANK BINDING**: each operator user has `default_tank_id`, bound to session on login. Operator
   never selects a tank. Only ADMIN can assign/reassign an operator's tank.
 - **USAGE METER**: every vehicle/asset has ONE monotonically-increasing usage meter whose kind is
@@ -96,13 +99,13 @@ manager/admin=all. Override authority: ADMIN only. Adjustments: SUPERVISOR or AD
 Port tokens into `tailwind.config.ts` and a shadcn/ui theme. Font: Inter (400–800) via next/font.
 
 Colors: bg `#F6F7F9`, card `#FFFFFF`, sidebar `#0F172A`, text `#0F172A`, muted `#475569`,
-primary `#0F766E`, petrol `#15803D`, diesel `#D97706`, danger `#DC2626`, warning `#F59E0B`,
-info `#2563EB`, success `#16A34A`, border `#E2E8F0`.
+primary `#0F766E`, petrol `#15803D`, diesel `#D97706`, kerosene `#2563EB`, danger `#DC2626`,
+warning `#F59E0B`, info `#2563EB`, success `#16A34A`, border `#E2E8F0`.
 
 Radii: cards 20–32px (token `xl2`=20px + larger). Shadows: soft `0 10px 30px rgba(15,23,42,.08)`,
 panel `0 4px 18px rgba(15,23,42,.06)`.
 
-Patterns: rounded-full fuel-type chips (petrol green / diesel amber); dark slate (`#0F172A`)
+Patterns: rounded-full fuel-type chips (petrol green / diesel amber / kerosene blue); dark slate (`#0F172A`)
 context cards for "assigned tank"; mobile = one primary action per 390-wide screen; desktop =
 248px dark sidebar + light content (1440-based); KPI card grids; large bold numbers.
 

@@ -5,6 +5,7 @@ import { Logo } from "@/components/brand/logo";
 import { PrintButton } from "@/components/admin/qr-tokens/print-button";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { createCaller } from "@/server/api/root";
 import { createTRPCContext } from "@/server/api/trpc";
 import { auth } from "@/server/auth";
@@ -41,8 +42,8 @@ export default async function PrintQrPage({ params }: { params: { vehicleId: str
         <h1 className="mt-4 text-3xl font-extrabold">{data.plateNumber}</h1>
         <p className="mt-1 text-sm text-muted">{data.vehicleTypeName}</p>
         <div className="mt-2 flex justify-center">
-          <Badge variant={data.fuelType === "PETROL" ? "petrol" : "diesel"}>
-            {data.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+          <Badge variant={FUEL_CONFIG[data.fuelType].badgeVariant}>
+            {fuelLabel(data.fuelType)}
           </Badge>
         </div>
 

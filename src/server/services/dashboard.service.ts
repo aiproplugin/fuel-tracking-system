@@ -1,5 +1,6 @@
 import type { MovementType } from "@prisma/client";
 import { startOfColomboDay } from "@/lib/format";
+import { FUEL_TYPES, type FuelTypeName } from "@/lib/fuel";
 import { formatEfficiency, formatMeter } from "@/lib/meter";
 import { db } from "@/server/db";
 import { effectiveSiteId, type Actor } from "@/server/services/actor";
@@ -27,8 +28,8 @@ const weekdayFormatter = new Intl.DateTimeFormat("en-GB", {
 
 export interface DashboardKpis {
   volumeLiters: number;
-  petrolStockLiters: number;
-  dieselStockLiters: number;
+  /** Current stock per fuel type — never a cross-type total. */
+  stockByFuelType: Record<FuelTypeName, number>;
   lowStockTanks: number;
   meterExceptionsPending: number;
   abnormalConsumption: number;
@@ -183,10 +184,15 @@ export async function getDashboardSummary(
   }
 
   // --- Stock KPIs ------------------------------------------------------------
-  const sumStock = (fuelType: "PETROL" | "DIESEL") =>
-    tanks
-      .filter((tank) => tank.fuelType === fuelType)
-      .reduce((total, tank) => total + tank.currentStock.toNumber(), 0);
+  // Per fuel type, never summed across types (CLAUDE.md aggregates rule).
+  const stockByFuelType = Object.fromEntries(
+    FUEL_TYPES.map((fuelType) => [
+      fuelType,
+      tanks
+        .filter((tank) => tank.fuelType === fuelType)
+        .reduce((total, tank) => total + tank.currentStock.toNumber(), 0),
+    ]),
+  ) as Record<FuelTypeName, number>;
 
   const lowStockTanks = tanks.filter((tank) => tank.currentStock.lessThan(tank.lowStockThreshold));
 
@@ -248,8 +254,7 @@ export async function getDashboardSummary(
     generatedAt: now,
     kpis: {
       volumeLiters,
-      petrolStockLiters: sumStock("PETROL"),
-      dieselStockLiters: sumStock("DIESEL"),
+      stockByFuelType,
       lowStockTanks: lowStockTanks.length,
       meterExceptionsPending: pendingExceptionCount,
       abnormalConsumption,

@@ -6,6 +6,7 @@ import { QuotaStatusLine } from "@/components/operator/quota-status-line";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatLiters } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { METER_CONFIG, formatMeter } from "@/lib/meter";
 import { MAX_LITERS_PER_ISSUE } from "@/lib/schemas/fuel-issue";
 
@@ -67,8 +68,8 @@ export function FuelIssueForm({
             <p className="text-xs text-slate-400">Bound tank</p>
             <p className="text-lg font-bold">{tank.name}</p>
           </div>
-          <Badge variant={tank.fuelType === "PETROL" ? "petrolOnDark" : "dieselOnDark"}>
-            {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+          <Badge variant={FUEL_CONFIG[tank.fuelType].badgeVariantOnDark}>
+            {fuelLabel(tank.fuelType)}
           </Badge>
         </div>
         <p className="mt-3 text-sm text-slate-300">

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { FUEL_TYPES, type FuelTypeName } from "@/lib/fuel";
 import { db } from "@/server/db";
 import { siteScopeWhere, type Actor } from "@/server/services/actor";
 import { recordAuditEvent } from "@/server/services/audit.service";
@@ -35,13 +36,17 @@ export async function listTanks(actor: Actor) {
 export async function getStockSummary(actor: Actor) {
   const tanks = await listTanks(actor);
   const active = tanks.filter((tank) => tank.isActive);
-  const sum = (fuelType: "PETROL" | "DIESEL") =>
-    active
-      .filter((tank) => tank.fuelType === fuelType)
-      .reduce((total, tank) => total + tank.currentStockLiters, 0);
+  // Per fuel type, never summed across types (CLAUDE.md aggregates rule).
+  const stockByFuelType = Object.fromEntries(
+    FUEL_TYPES.map((fuelType) => [
+      fuelType,
+      active
+        .filter((tank) => tank.fuelType === fuelType)
+        .reduce((total, tank) => total + tank.currentStockLiters, 0),
+    ]),
+  ) as Record<FuelTypeName, number>;
   return {
-    petrolStockLiters: sum("PETROL"),
-    dieselStockLiters: sum("DIESEL"),
+    stockByFuelType,
     lowStockTanks: active.filter((tank) => tank.isLow).length,
     tankCount: active.length,
   };
@@ -56,7 +61,7 @@ export async function createTank(
   input: {
     name: string;
     siteId: string;
-    fuelType: "PETROL" | "DIESEL";
+    fuelType: FuelTypeName;
     capacityLiters: number;
     lowStockThreshold: number;
   },

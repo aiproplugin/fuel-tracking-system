@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FUEL_TYPES } from "@/lib/fuel";
 import { passwordSchema, strictObject, usernameSchema } from "@/lib/validation";
 
 /**
@@ -8,7 +9,8 @@ import { passwordSchema, strictObject, usernameSchema } from "@/lib/validation";
 
 export const idSchema = z.string().uuid();
 
-export const fuelTypeSchema = z.enum(["PETROL", "DIESEL"]);
+/** Derived from FUEL_TYPES so a new fuel type is accepted server-side automatically. */
+export const fuelTypeSchema = z.enum(FUEL_TYPES);
 export const roleSchema = z.enum(["OPERATOR", "SUPERVISOR", "MANAGER", "ADMIN"]);
 
 export const nameSchema = z.string().trim().min(2).max(80);

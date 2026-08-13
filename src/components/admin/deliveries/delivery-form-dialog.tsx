@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatLiters } from "@/lib/format";
+import { fuelLabel } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
 
 /** datetime-local value for "now" in the browser's local time. */
@@ -112,7 +113,7 @@ export function DeliveryFormDialog({ open, onOpenChange, onSaved }: DeliveryForm
               <SelectContent>
                 {activeTanks.map((tank) => (
                   <SelectItem key={tank.id} value={tank.id}>
-                    {tank.name} · {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"} ·{" "}
+                    {tank.name} · {fuelLabel(tank.fuelType)} ·{" "}
                     {formatLiters(tank.currentStockLiters)} of {formatLiters(tank.capacityLiters)}
                   </SelectItem>
                 ))}

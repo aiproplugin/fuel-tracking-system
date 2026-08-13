@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { type FuelTypeName } from "@/lib/fuel";
 import { db } from "@/server/db";
 import { type Actor } from "@/server/services/actor";
 import { recordAuditEvent } from "@/server/services/audit.service";
@@ -57,7 +58,7 @@ export async function createVehicle(
     plateNumber: string;
     vehicleTypeId: string;
     companyId: string;
-    fuelType: "PETROL" | "DIESEL";
+    fuelType: FuelTypeName;
     currentMeter: number;
   },
 ) {
@@ -94,7 +95,7 @@ export async function updateVehicle(
     plateNumber: string;
     vehicleTypeId: string;
     companyId: string;
-    fuelType: "PETROL" | "DIESEL";
+    fuelType: FuelTypeName;
     isActive: boolean;
   },
 ) {

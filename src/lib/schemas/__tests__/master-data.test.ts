@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { FUEL_TYPES } from "@/lib/fuel";
 import {
   auditListSchema,
   createTankSchema,
   createUserSchema,
   createVehicleSchema,
+  fuelTypeSchema,
   plateNumberSchema,
   upsertVehicleTypeSchema,
 } from "@/lib/schemas/master-data";
@@ -46,6 +48,25 @@ describe("createTankSchema", () => {
 
   it("rejects non-positive capacity", () => {
     expect(createTankSchema.safeParse({ ...valid, capacityLiters: 0 }).success).toBe(false);
+  });
+
+  it("accepts every configured fuel type and nothing else", () => {
+    for (const fuelType of FUEL_TYPES) {
+      expect(createTankSchema.safeParse({ ...valid, fuelType }).success).toBe(true);
+    }
+    expect(createTankSchema.safeParse({ ...valid, fuelType: "LPG" }).success).toBe(false);
+  });
+});
+
+describe("fuelTypeSchema", () => {
+  it("stays in lockstep with FUEL_TYPES", () => {
+    expect(fuelTypeSchema.options).toEqual([...FUEL_TYPES]);
+  });
+
+  it("accepts KEROSENE and rejects unknown or lowercased values", () => {
+    expect(fuelTypeSchema.safeParse("KEROSENE").success).toBe(true);
+    expect(fuelTypeSchema.safeParse("kerosene").success).toBe(false);
+    expect(fuelTypeSchema.safeParse("LPG").success).toBe(false);
   });
 });
 
@@ -116,6 +137,18 @@ describe("createVehicleSchema", () => {
     expect(createVehicleSchema.safeParse(valid).success).toBe(true);
     expect(createVehicleSchema.safeParse({ ...valid, currentMeter: -1 }).success).toBe(false);
     expect(createVehicleSchema.safeParse({ ...valid, injected: true }).success).toBe(false);
+  });
+
+  it("accepts a KEROSENE vehicle", () => {
+    expect(
+      createVehicleSchema.safeParse({
+        plateNumber: "KB-0450",
+        vehicleTypeId: TYPE_ID,
+        companyId: COMPANY_ID,
+        fuelType: "KEROSENE" as const,
+        currentMeter: 1180,
+      }).success,
+    ).toBe(true);
   });
 });
 

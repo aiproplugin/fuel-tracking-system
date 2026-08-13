@@ -13,12 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatLiters } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel, type FuelTypeName } from "@/lib/fuel";
 
 export interface TankRow {
   id: string;
   name: string;
   site: { id: string; name: string };
-  fuelType: "PETROL" | "DIESEL";
+  fuelType: FuelTypeName;
   capacityLiters: number;
   currentStockLiters: number;
   lowStockThreshold: number;
@@ -70,8 +71,8 @@ export function TankTable({ tanks, isLoading, canEdit, onEdit }: TankTableProps)
                 <TableCell className="font-semibold">{tank.name}</TableCell>
                 <TableCell>{tank.site.name}</TableCell>
                 <TableCell>
-                  <Badge variant={tank.fuelType === "PETROL" ? "petrol" : "diesel"}>
-                    {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+                  <Badge variant={FUEL_CONFIG[tank.fuelType].badgeVariant}>
+                    {fuelLabel(tank.fuelType)}
                   </Badge>
                 </TableCell>
                 <TableCell>

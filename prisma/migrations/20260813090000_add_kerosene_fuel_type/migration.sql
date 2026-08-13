@@ -1,0 +1,11 @@
+-- Adds a third value to the FuelType enum for kerosene pumps/tanks.
+--
+-- Additive only: existing tank/vehicle rows keep their PETROL/DIESEL values,
+-- no data is rewritten and no table is rewritten or exclusively locked.
+-- PostgreSQL appends the value after DIESEL; nothing in the application orders
+-- by fuel_type, so the ordinal position carries no meaning.
+--
+-- Note: PostgreSQL 12+ permits ALTER TYPE ... ADD VALUE inside a transaction
+-- block (as Prisma runs migrations) provided the new value is not USED in the
+-- same transaction — it is not used here.
+ALTER TYPE "FuelType" ADD VALUE 'KEROSENE';

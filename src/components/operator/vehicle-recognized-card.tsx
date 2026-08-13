@@ -5,6 +5,7 @@ import { QuotaStatusLine } from "@/components/operator/quota-status-line";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatLiters } from "@/lib/format";
+import { fuelLabel } from "@/lib/fuel";
 import { METER_CONFIG, formatMeter } from "@/lib/meter";
 
 /**
@@ -24,7 +25,6 @@ export function VehicleRecognizedCard({
   onScanAgain,
 }: VehicleRecognizedCardProps) {
   const { vehicle, tank } = lookup;
-  const fuelLabel = vehicle.fuelType === "PETROL" ? "Petrol" : "Diesel";
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-4 px-5 py-6">
@@ -47,7 +47,7 @@ export function VehicleRecognizedCard({
           </div>
           <div>
             <p className="text-muted">Fuel type</p>
-            <p className="mt-1 font-semibold">{fuelLabel}</p>
+            <p className="mt-1 font-semibold">{fuelLabel(vehicle.fuelType)}</p>
           </div>
           <div>
             <p className="text-muted">
@@ -70,7 +70,7 @@ export function VehicleRecognizedCard({
         <div className="flex justify-between">
           <span>Assigned tank</span>
           <span className="font-semibold">
-            {tank.name} · {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+            {tank.name} · {fuelLabel(tank.fuelType)}
           </span>
         </div>
         <div className="mt-2 flex justify-between">

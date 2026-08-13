@@ -18,6 +18,7 @@ const config: Config = {
         primary: "#0F766E",
         petrol: "#15803D",
         diesel: "#D97706",
+        kerosene: "#2563EB",
         danger: "#DC2626",
         warning: "#F59E0B",
         info: "#2563EB",

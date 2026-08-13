@@ -1,5 +1,6 @@
 import type { Role } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { type FuelTypeName } from "@/lib/fuel";
 import { logger } from "@/lib/logger";
 import { computeLockedUntil, isLocked } from "@/server/auth/lockout-policy";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
@@ -29,7 +30,7 @@ export interface UserHomeContext {
   defaultTank: {
     id: string;
     name: string;
-    fuelType: "PETROL" | "DIESEL";
+    fuelType: FuelTypeName;
     currentStockLiters: number;
     capacityLiters: number;
   } | null;

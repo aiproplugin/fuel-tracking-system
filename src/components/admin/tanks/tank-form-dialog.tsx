@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FUEL_TYPES, fuelLabel, type FuelTypeName } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
 
 export interface TankFormDialogProps {
@@ -34,7 +35,7 @@ export function TankFormDialog({ open, onOpenChange, tank, onSaved }: TankFormDi
 
   const [name, setName] = useState("");
   const [siteId, setSiteId] = useState("");
-  const [fuelType, setFuelType] = useState<"PETROL" | "DIESEL">("DIESEL");
+  const [fuelType, setFuelType] = useState<FuelTypeName>("DIESEL");
   const [capacity, setCapacity] = useState("");
   const [threshold, setThreshold] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -143,8 +144,11 @@ export function TankFormDialog({ open, onOpenChange, tank, onSaved }: TankFormDi
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PETROL">Petrol</SelectItem>
-                    <SelectItem value="DIESEL">Diesel</SelectItem>
+                    {FUEL_TYPES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {fuelLabel(value)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
 
 const NO_TANK = "none";
@@ -75,8 +76,7 @@ export function AssignTankDialog({ open, onOpenChange, user, onSaved }: AssignTa
                 <SelectItem value={NO_TANK}>No tank (unassigned)</SelectItem>
                 {activeTanks.map((tank) => (
                   <SelectItem key={tank.id} value={tank.id}>
-                    {tank.name} · {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"} ·{" "}
-                    {tank.site.name}
+                    {tank.name} · {fuelLabel(tank.fuelType)} · {tank.site.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -86,7 +86,7 @@ export function AssignTankDialog({ open, onOpenChange, user, onSaved }: AssignTa
           {user?.defaultTank ? (
             <p className="text-sm text-muted">
               Currently assigned:{" "}
-              <Badge variant={user.defaultTank.fuelType === "PETROL" ? "petrol" : "diesel"}>
+              <Badge variant={FUEL_CONFIG[user.defaultTank.fuelType].badgeVariant}>
                 {user.defaultTank.name}
               </Badge>
             </p>

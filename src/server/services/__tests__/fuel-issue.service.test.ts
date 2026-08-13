@@ -91,6 +91,22 @@ function makeForklift(overrides: Record<string, unknown> = {}) {
   });
 }
 
+/** A KEROSENE burner (HOURS meter, band 0.5–1.6 hrs/L) drawing from Tank D. */
+function makeKeroseneBurner(overrides: Record<string, unknown> = {}) {
+  return makeVehicle({
+    id: "veh-kb",
+    plateNumber: "KB-0450",
+    fuelType: "KEROSENE",
+    currentMeter: 1_180,
+    vehicleType: {
+      meterType: "HOURS",
+      minEfficiency: new Prisma.Decimal("0.50"),
+      maxEfficiency: new Prisma.Decimal("1.60"),
+    },
+    ...overrides,
+  });
+}
+
 /** A DIESEL generator (ENERGY meter, band 2.5–4.0 kWh/L). */
 function makeGenerator(overrides: Record<string, unknown> = {}) {
   return makeVehicle({
@@ -142,6 +158,48 @@ describe("submitFuelIssue — hard blocks (no writes)", () => {
       outcome: "FUEL_TYPE_MISMATCH",
       vehicleFuelType: "PETROL",
       tankFuelType: "DIESEL",
+    });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  // KEROSENE is a first-class fuel type: the block is a plain inequality on the
+  // enum, so it must fire in BOTH directions against a kerosene tank/vehicle.
+  it("blocks a KEROSENE vehicle at a DIESEL tank", async () => {
+    mockDb.vehicle.findUnique.mockResolvedValue(makeKeroseneBurner());
+
+    const result = await submitFuelIssue(operator, { ...validInput, vehicleId: "veh-kb" });
+
+    expect(result).toEqual({
+      outcome: "FUEL_TYPE_MISMATCH",
+      vehicleFuelType: "KEROSENE",
+      tankFuelType: "DIESEL",
+    });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks a DIESEL vehicle at a KEROSENE tank", async () => {
+    mockDb.tank.findUnique.mockResolvedValue(makeTank({ name: "Tank D", fuelType: "KEROSENE" }));
+
+    const result = await submitFuelIssue(operator, validInput);
+
+    expect(result).toEqual({
+      outcome: "FUEL_TYPE_MISMATCH",
+      vehicleFuelType: "DIESEL",
+      tankFuelType: "KEROSENE",
+    });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks a PETROL vehicle at a KEROSENE tank", async () => {
+    mockDb.tank.findUnique.mockResolvedValue(makeTank({ name: "Tank D", fuelType: "KEROSENE" }));
+    mockDb.vehicle.findUnique.mockResolvedValue(makeVehicle({ fuelType: "PETROL" }));
+
+    const result = await submitFuelIssue(operator, validInput);
+
+    expect(result).toEqual({
+      outcome: "FUEL_TYPE_MISMATCH",
+      vehicleFuelType: "PETROL",
+      tankFuelType: "KEROSENE",
     });
     expect(mockDb.$transaction).not.toHaveBeenCalled();
   });
@@ -245,6 +303,67 @@ describe("submitFuelIssue — success path", () => {
     expect(mockDb.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ action: "FUEL_ISSUED" }) }),
     );
+  });
+
+  it("issues normally when a KEROSENE vehicle draws from a KEROSENE tank", async () => {
+    mockDb.tank.findUnique.mockResolvedValue(makeTank({ name: "Tank D", fuelType: "KEROSENE" }));
+    mockDb.vehicle.findUnique.mockResolvedValue(makeKeroseneBurner());
+    // Previous fill: 20 L at 1,180 hrs. Now 1,200 -> 20 hrs / 20 L = 1.00 hrs/L (in band).
+    mockDb.fuelTransaction.findFirst.mockResolvedValue({
+      meterReading: 1_180,
+      liters: new Prisma.Decimal("20.00"),
+    });
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-kb",
+      liters: 20,
+      meterReading: 1_200,
+    });
+
+    expect(result.outcome).toBe("SUCCESS");
+    if (result.outcome !== "SUCCESS") return;
+    expect(result.receipt.meterType).toBe("HOURS");
+    expect(result.receipt.efficiency).toBe(1);
+
+    // The ledger write is identical to any other fuel type: one signed movement.
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    const movementArg = mockDb.stockMovement.create.mock.calls[0]?.[0] as {
+      data: { type: string; quantity: Prisma.Decimal; balanceAfter: Prisma.Decimal };
+    };
+    expect(movementArg.data.type).toBe("ISSUE");
+    expect(movementArg.data.quantity.toNumber()).toBe(-20);
+    expect(movementArg.data.balanceAfter.toNumber()).toBe(2438);
+
+    const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
+    };
+    expect(createArg.data.efficiency?.toNumber()).toBe(1);
+    expect(createArg.data.isAbnormal).toBe(false);
+  });
+
+  it("flags a KEROSENE fill outside its vehicle type's band", async () => {
+    mockDb.tank.findUnique.mockResolvedValue(makeTank({ name: "Tank D", fuelType: "KEROSENE" }));
+    mockDb.vehicle.findUnique.mockResolvedValue(makeKeroseneBurner());
+    // 20 hrs / 10 L = 2.00 hrs/L, above the 1.60 ceiling.
+    mockDb.fuelTransaction.findFirst.mockResolvedValue({
+      meterReading: 1_180,
+      liters: new Prisma.Decimal("10.00"),
+    });
+
+    const result = await submitFuelIssue(operator, {
+      ...validInput,
+      vehicleId: "veh-kb",
+      liters: 20,
+      meterReading: 1_200,
+    });
+
+    expect(result.outcome).toBe("SUCCESS");
+    const createArg = mockDb.fuelTransaction.create.mock.calls[0]?.[0] as {
+      data: { efficiency: Prisma.Decimal | null; isAbnormal: boolean };
+    };
+    expect(createArg.data.efficiency?.toNumber()).toBe(2);
+    expect(createArg.data.isAbnormal).toBe(true);
   });
 
   it("computes efficiency from the previous fill and flags abnormal outside the band", async () => {

@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel, type FuelTypeName } from "@/lib/fuel";
 
 export interface UserRow {
   id: string;
@@ -21,7 +22,7 @@ export interface UserRow {
   role: "OPERATOR" | "SUPERVISOR" | "MANAGER" | "ADMIN";
   isActive: boolean;
   site: { id: string; name: string } | null;
-  defaultTank: { id: string; name: string; fuelType: "PETROL" | "DIESEL" } | null;
+  defaultTank: { id: string; name: string; fuelType: FuelTypeName } | null;
   isLocked: boolean;
   mustChangePassword: boolean;
   lastLoginAt: Date | string | null;
@@ -94,8 +95,8 @@ export function UserTable({
                   ) : user.defaultTank ? (
                     <span className="inline-flex items-center gap-2">
                       <span className="font-semibold">{user.defaultTank.name}</span>
-                      <Badge variant={user.defaultTank.fuelType === "PETROL" ? "petrol" : "diesel"}>
-                        {user.defaultTank.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+                      <Badge variant={FUEL_CONFIG[user.defaultTank.fuelType].badgeVariant}>
+                        {fuelLabel(user.defaultTank.fuelType)}
                       </Badge>
                     </span>
                   ) : (

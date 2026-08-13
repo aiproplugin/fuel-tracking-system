@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import { Logo } from "@/components/brand/logo";
 import { Badge } from "@/components/ui/badge";
 import { formatLiters, formatTime } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { METER_CONFIG } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
@@ -39,11 +40,8 @@ export function OperatorHomeClient({ displayName }: { displayName: string }) {
           <div className="mt-2 flex items-end justify-between">
             <div>
               <h2 className="text-xl font-bold">{tank.name}</h2>
-              <Badge
-                variant={tank.fuelType === "PETROL" ? "petrolOnDark" : "dieselOnDark"}
-                className="mt-3"
-              >
-                {tank.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+              <Badge variant={FUEL_CONFIG[tank.fuelType].badgeVariantOnDark} className="mt-3">
+                {fuelLabel(tank.fuelType)}
               </Badge>
             </div>
             <div className="text-right">

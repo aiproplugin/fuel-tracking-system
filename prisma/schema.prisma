@@ -30,9 +30,14 @@ enum Role {
   ADMIN
 }
 
+// A vehicle may only be fuelled from a tank of the SAME type — the mismatch
+// hard block is a plain equality check, so it holds for every value here.
+// Extensible: adding a type = one enum value here plus one FUEL_CONFIG entry
+// in src/lib/fuel.ts (completeness is unit-tested).
 enum FuelType {
   PETROL
   DIESEL
+  KEROSENE
 }
 
 // What a vehicle type's monotonically-increasing usage meter measures.

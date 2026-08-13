@@ -2,6 +2,7 @@ import { Prisma, type MeterType } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { env } from "@/lib/env";
 import { formatLiters, startOfColomboDay } from "@/lib/format";
+import { type FuelTypeName } from "@/lib/fuel";
 import { METER_CONFIG, formatEfficiency, formatMeter } from "@/lib/meter";
 import type { ReportKey } from "@/lib/schemas/reports";
 import { db } from "@/server/db";
@@ -752,7 +753,7 @@ export interface VehicleEfficiencyDetail {
     plateNumber: string;
     vehicleType: string;
     meterType: MeterType;
-    fuelType: string;
+    fuelType: FuelTypeName;
     currentMeter: number;
   };
   totals: { fills: number; liters: number; meterDelta: number; efficiency: number | null };

@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format";
+import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
 
 /**
@@ -81,8 +82,8 @@ export function QrTokensClient() {
                 <TableRow key={row.vehicleId}>
                   <TableCell className="font-semibold">{row.plateNumber}</TableCell>
                   <TableCell>
-                    <Badge variant={row.fuelType === "PETROL" ? "petrol" : "diesel"}>
-                      {row.fuelType === "PETROL" ? "Petrol" : "Diesel"}
+                    <Badge variant={FUEL_CONFIG[row.fuelType].badgeVariant}>
+                      {fuelLabel(row.fuelType)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted">

@@ -5,9 +5,8 @@ import type { LookupFound } from "@/components/operator/scan-flow";
 import { QuotaStatusLine, type QuotaLineInfo } from "@/components/operator/quota-status-line";
 import { Button } from "@/components/ui/button";
 import { formatLiters } from "@/lib/format";
+import { fuelLabel } from "@/lib/fuel";
 import { METER_CONFIG, formatMeter, type MeterTypeName } from "@/lib/meter";
-
-const fuelLabel = (fuelType: "PETROL" | "DIESEL") => (fuelType === "PETROL" ? "Petrol" : "Diesel");
 
 /** M7_FuelTypeMismatch — red HARD BLOCK. There is no override path. */
 export function MismatchScreen({

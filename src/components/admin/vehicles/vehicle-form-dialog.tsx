@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatEffectiveQuota } from "@/lib/format";
+import { FUEL_TYPES, fuelLabel, type FuelTypeName } from "@/lib/fuel";
 import { METER_CONFIG } from "@/lib/meter";
 import { api } from "@/lib/trpc/client";
 
@@ -51,7 +52,7 @@ export function VehicleFormDialog({
   const [plateNumber, setPlateNumber] = useState("");
   const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [companyId, setCompanyId] = useState("");
-  const [fuelType, setFuelType] = useState<"PETROL" | "DIESEL">("DIESEL");
+  const [fuelType, setFuelType] = useState<FuelTypeName>("DIESEL");
   const [meterReading, setMeterReading] = useState("0");
   const [isActive, setIsActive] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -190,8 +191,11 @@ export function VehicleFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="PETROL">Petrol</SelectItem>
-                <SelectItem value="DIESEL">Diesel</SelectItem>
+                {FUEL_TYPES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {fuelLabel(value)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

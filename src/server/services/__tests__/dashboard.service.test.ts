@@ -37,6 +37,12 @@ function tanks() {
       lowStockThreshold: new Prisma.Decimal("1000.00"),
       name: "Tank B",
     },
+    {
+      fuelType: "KEROSENE",
+      currentStock: new Prisma.Decimal("960.00"),
+      lowStockThreshold: new Prisma.Decimal("400.00"),
+      name: "Tank D",
+    },
   ];
 }
 
@@ -143,10 +149,24 @@ describe("getDashboardSummary — KPIs", () => {
 
   it("derives stock and low-stock KPIs from active tanks", async () => {
     const result = await getDashboardSummary(admin, { range: "SEVEN_DAYS" });
-    expect(result.kpis.petrolStockLiters).toBe(8420);
-    expect(result.kpis.dieselStockLiters).toBe(500);
+    expect(result.kpis.stockByFuelType.PETROL).toBe(8420);
+    expect(result.kpis.stockByFuelType.DIESEL).toBe(500);
+    expect(result.kpis.stockByFuelType.KEROSENE).toBe(960);
     expect(result.kpis.lowStockTanks).toBe(1); // Tank B below threshold
     expect(result.kpis.meterExceptionsPending).toBe(4);
+  });
+
+  it("reports a zero, never a missing key, for a fuel type with no tanks", async () => {
+    mockDb.tank.findMany.mockResolvedValue([
+      {
+        fuelType: "DIESEL",
+        currentStock: new Prisma.Decimal("500.00"),
+        lowStockThreshold: new Prisma.Decimal("1000.00"),
+        name: "Tank B",
+      },
+    ]);
+    const result = await getDashboardSummary(admin, { range: "SEVEN_DAYS" });
+    expect(result.kpis.stockByFuelType).toEqual({ PETROL: 0, DIESEL: 500, KEROSENE: 0 });
   });
 });
 
