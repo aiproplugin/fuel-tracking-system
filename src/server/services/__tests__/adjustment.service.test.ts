@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockDb } = vi.hoisted(() => ({
   mockDb: {
-    stockAdjustment: { findUnique: vi.fn(), create: vi.fn() },
+    stockAdjustment: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     tank: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
     stockMovement: { create: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -13,7 +13,8 @@ const { mockDb } = vi.hoisted(() => ({
 
 vi.mock("@/server/db", () => ({ db: mockDb }));
 
-import { createAdjustment } from "@/server/services/adjustment.service";
+import { ADJUSTMENT_REASONS } from "@/lib/adjustment-reason";
+import { createAdjustment, listAdjustments } from "@/server/services/adjustment.service";
 import type { Actor } from "@/server/services/actor";
 import { testActor } from "@/server/services/__tests__/test-actor";
 
@@ -35,6 +36,7 @@ const validInput = {
   tankId: "tank-1",
   idempotencyKey: "9b8d1e42-77aa-4f4e-8c53-2f1e9d3c4a55",
   quantityChange: -25,
+  reasonCategory: "LEAK_OR_SPILL" as const,
   reason: "Physical dip reading below ledger.",
 };
 
@@ -67,10 +69,51 @@ describe("createAdjustment", () => {
     expect(movementArg.data.balanceAfter.toNumber()).toBe(1745);
 
     const auditArg = mockDb.auditLog.create.mock.calls[0]?.[0] as {
-      data: { action: string; after: { reason: string } };
+      data: { action: string; after: { reason: string; reasonCategory: string } };
     };
     expect(auditArg.data.action).toBe("ADJUSTMENT_RECORDED");
     expect(auditArg.data.after.reason).toContain("Physical dip");
+    // The category must reach the trail too, so the audit itself is analysable.
+    expect(auditArg.data.after.reasonCategory).toBe("LEAK_OR_SPILL");
+  });
+
+  it("persists the reason category alongside the free-text detail", async () => {
+    await createAdjustment(supervisor, {
+      ...validInput,
+      reasonCategory: "UNAUTHORIZED_EXTRACTION",
+    });
+
+    const adjustmentArg = mockDb.stockAdjustment.create.mock.calls[0]?.[0] as {
+      data: { reasonCategory: string; reason: string; quantityChange: Prisma.Decimal };
+    };
+    expect(adjustmentArg.data.reasonCategory).toBe("UNAUTHORIZED_EXTRACTION");
+    expect(adjustmentArg.data.reason).toBe("Physical dip reading below ledger.");
+    // The category is metadata only — the ledger maths is unchanged by it.
+    expect(adjustmentArg.data.quantityChange.toNumber()).toBe(-25);
+
+    const movementArg = mockDb.stockMovement.create.mock.calls[0]?.[0] as {
+      data: { quantity: Prisma.Decimal; balanceAfter: Prisma.Decimal };
+    };
+    expect(movementArg.data.quantity.toNumber()).toBe(-25);
+    expect(movementArg.data.balanceAfter.toNumber()).toBe(1745);
+  });
+
+  it("records the same ledger movement whichever category is chosen", async () => {
+    for (const [index, category] of ADJUSTMENT_REASONS.entries()) {
+      const result = await createAdjustment(supervisor, {
+        ...validInput,
+        idempotencyKey: `9b8d1e42-77aa-4f4e-8c53-2f1e9d3c4a5${index}`,
+        reasonCategory: category,
+      });
+
+      expect(result).toMatchObject({ outcome: "SUCCESS" });
+      const movementArg = mockDb.stockMovement.create.mock.calls[index]?.[0] as {
+        data: { type: string; quantity: Prisma.Decimal; balanceAfter: Prisma.Decimal };
+      };
+      expect(movementArg.data.type).toBe("ADJUSTMENT");
+      expect(movementArg.data.quantity.toNumber()).toBe(-25);
+      expect(movementArg.data.balanceAfter.toNumber()).toBe(1745);
+    }
   });
 
   it("blocks removing more than recorded stock (pre-check, zero writes)", async () => {
@@ -117,6 +160,29 @@ describe("createAdjustment", () => {
       adjustment: { id: "adj-original", replayed: true },
     });
     expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("surfaces both the category and the detail in the register listing", async () => {
+    mockDb.stockAdjustment.findMany.mockResolvedValue([
+      {
+        id: "adj-1",
+        quantityChange: new Prisma.Decimal("-25.00"),
+        reasonCategory: "EVAPORATION_OR_SLUDGE",
+        reason: "Tank-bottom sediment removed at the July clean-out.",
+        adjustedAt: new Date("2026-07-02T04:30:00.000Z"),
+        tank: { name: "Multilac" },
+        adjustedBy: { displayName: "Sunil P." },
+        movement: { balanceAfter: new Prisma.Decimal("1745.00") },
+      },
+    ]);
+
+    const result = await listAdjustments(supervisor, { limit: 20 });
+
+    expect(result.adjustments[0]).toMatchObject({
+      reasonCategory: "EVAPORATION_OR_SLUDGE",
+      reason: "Tank-bottom sediment removed at the July clean-out.",
+      quantityChange: -25,
+    });
   });
 
   it("uses the in-transaction guard as the real gate on races", async () => {

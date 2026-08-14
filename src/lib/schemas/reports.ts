@@ -14,6 +14,7 @@ export const REPORT_KEYS = [
   "vehicle-efficiency",
   "tank-ledger",
   "delivery-history",
+  "adjustment-register",
   "abnormal-consumption",
   "low-stock",
   "driver-usage",

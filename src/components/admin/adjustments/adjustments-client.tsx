@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/admin/page-header";
 import { AdjustmentFormDialog } from "@/components/admin/adjustments/adjustment-form-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ADJUSTMENT_REASON_CONFIG } from "@/lib/adjustment-reason";
 import { formatDateTime, formatLiters } from "@/lib/format";
 import { api } from "@/lib/trpc/client";
 
@@ -53,7 +55,8 @@ export function AdjustmentsClient() {
               <TableHead>When</TableHead>
               <TableHead>Tank</TableHead>
               <TableHead>Change</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Detail</TableHead>
               <TableHead>By</TableHead>
               <TableHead>Balance after</TableHead>
             </tr>
@@ -61,13 +64,13 @@ export function AdjustmentsClient() {
           <TableBody>
             {adjustments.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted">
+                <TableCell colSpan={7} className="py-8 text-center text-muted">
                   Loading adjustments…
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted">
+                <TableCell colSpan={7} className="py-8 text-center text-muted">
                   No adjustments recorded yet.
                 </TableCell>
               </TableRow>
@@ -83,6 +86,14 @@ export function AdjustmentsClient() {
                   >
                     {adjustment.quantityChange > 0 ? "+" : ""}
                     {adjustment.quantityChange.toLocaleString("en-US")}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={ADJUSTMENT_REASON_CONFIG[adjustment.reasonCategory].badgeVariant}
+                      title={ADJUSTMENT_REASON_CONFIG[adjustment.reasonCategory].label}
+                    >
+                      {ADJUSTMENT_REASON_CONFIG[adjustment.reasonCategory].shortLabel}
+                    </Badge>
                   </TableCell>
                   <TableCell className="max-w-xs truncate text-muted" title={adjustment.reason}>
                     {adjustment.reason}

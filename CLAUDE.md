@@ -50,6 +50,12 @@ Every fuel-quantity change runs through the service layer inside ONE atomic Pris
   band (too low or too high).
 - **AGGREGATES**: never mix meter types in one figure — fleet efficiency and meter-delta totals
   are computed/reported PER meter type; only litres may total across the whole fleet.
+- **ADJUSTMENT REASONS**: every stock adjustment records BOTH a required `AdjustmentReason`
+  category (for loss-by-cause reporting) and the required free-text detail — never one instead of
+  the other, both validated server-side. All category labels/helper text/chip variants live ONLY
+  in `src/lib/adjustment-reason.ts` (`ADJUSTMENT_REASON_CONFIG`, `ADJUSTMENT_REASONS`); adding a
+  category = one enum value + one config entry. The category is descriptive metadata: no stock
+  maths, guard, or movement ever branches on it.
 - **IDEMPOTENCY**: every fuel submission carries a client-generated idempotency key; dedupe and
   return the original transaction on retry/double-tap.
 - **QR TOKENS**: opaque random UUID-based string in its own `qr_token` table (never the plate,

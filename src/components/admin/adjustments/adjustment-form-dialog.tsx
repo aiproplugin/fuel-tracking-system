@@ -19,6 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ADJUSTMENT_REASONS,
+  ADJUSTMENT_REASON_CONFIG,
+  type AdjustmentReasonName,
+} from "@/lib/adjustment-reason";
 import { formatLiters } from "@/lib/format";
 import { fuelLabel } from "@/lib/fuel";
 import { api } from "@/lib/trpc/client";
@@ -35,6 +40,7 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
   const [tankId, setTankId] = useState("");
   const [direction, setDirection] = useState<"decrease" | "increase">("decrease");
   const [quantity, setQuantity] = useState("");
+  const [reasonCategory, setReasonCategory] = useState<AdjustmentReasonName | "">("");
   const [reason, setReason] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -44,6 +50,7 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
       setTankId("");
       setDirection("decrease");
       setQuantity("");
+      setReasonCategory("");
       setReason("");
       setIdempotencyKey(crypto.randomUUID());
       setMessage(null);
@@ -83,10 +90,16 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
       setMessage("Enter a positive quantity.");
       return;
     }
+    // UX only — the server rejects a missing category or detail regardless.
+    if (!reasonCategory) {
+      setMessage("Select a reason category.");
+      return;
+    }
     createMutation.mutate({
       tankId,
       idempotencyKey,
       quantityChange: direction === "decrease" ? -magnitude : magnitude,
+      reasonCategory,
       reason: reason.trim(),
     });
   }
@@ -97,8 +110,8 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
         <DialogHeader>
           <DialogTitle>Record adjustment</DialogTitle>
           <DialogDescription>
-            For physical-count corrections (shrinkage, spillage, metering error). The reason is
-            audited and shown in the register.
+            For physical-count corrections (shrinkage, spillage, metering error). Both the
+            category and the detail are required, audited, and shown in the register.
           </DialogDescription>
         </DialogHeader>
 
@@ -151,7 +164,36 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="adjustment-reason">Reason (audited)</Label>
+            <Label htmlFor="adjustment-reason-category">Reason category (required)</Label>
+            <Select
+              value={reasonCategory}
+              onValueChange={(value) => setReasonCategory(value as AdjustmentReasonName)}
+            >
+              <SelectTrigger id="adjustment-reason-category">
+                {/* Explicit children keep the closed trigger to one line — by
+                    default it would mirror the option's label AND helper text. */}
+                <SelectValue placeholder="Select a reason category">
+                  {reasonCategory ? ADJUSTMENT_REASON_CONFIG[reasonCategory].label : null}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {ADJUSTMENT_REASONS.map((category) => {
+                  const config = ADJUSTMENT_REASON_CONFIG[category];
+                  return (
+                    <SelectItem key={category} value={category} textValue={config.label}>
+                      <span className="flex flex-col gap-0.5 py-0.5">
+                        <span className="font-semibold">{config.label}</span>
+                        <span className="text-xs text-muted">{config.helper}</span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="adjustment-reason">Detail (audited, required)</Label>
             <Input
               id="adjustment-reason"
               value={reason}
@@ -161,6 +203,9 @@ export function AdjustmentFormDialog({ open, onOpenChange, onSaved }: Adjustment
               minLength={5}
               maxLength={500}
             />
+            <p className="text-xs text-muted">
+              The category groups the loss for reporting; this records what actually happened.
+            </p>
           </div>
 
           {message ? (

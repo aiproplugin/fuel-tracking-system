@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ADJUSTMENT_REASONS } from "@/lib/adjustment-reason";
 import { createAdjustmentSchema, createDeliverySchema } from "@/lib/schemas/stock";
 
 const TANK_ID = "3f0a72c1-58cc-4e7a-9d21-0a2f6f5f9b11";
@@ -40,6 +41,7 @@ describe("createAdjustmentSchema", () => {
     tankId: TANK_ID,
     idempotencyKey: KEY,
     quantityChange: -25,
+    reasonCategory: "LEAK_OR_SPILL",
     reason: "Physical dip reading below ledger.",
   };
 
@@ -54,5 +56,34 @@ describe("createAdjustmentSchema", () => {
 
   it("demands a meaningful reason", () => {
     expect(createAdjustmentSchema.safeParse({ ...valid, reason: "ok" }).success).toBe(false);
+  });
+
+  // The category is REQUIRED server-side — the dropdown is not the gate.
+  it("rejects an adjustment with no reason category", () => {
+    const { reasonCategory: _omitted, ...withoutCategory } = valid;
+    expect(createAdjustmentSchema.safeParse(withoutCategory).success).toBe(false);
+  });
+
+  it("rejects an empty or unknown reason category", () => {
+    expect(createAdjustmentSchema.safeParse({ ...valid, reasonCategory: "" }).success).toBe(false);
+    expect(createAdjustmentSchema.safeParse({ ...valid, reasonCategory: null }).success).toBe(
+      false,
+    );
+    expect(
+      createAdjustmentSchema.safeParse({ ...valid, reasonCategory: "SOMETHING_ELSE" }).success,
+    ).toBe(false);
+  });
+
+  it("accepts every configured category, and still demands the detail with one", () => {
+    for (const category of ADJUSTMENT_REASONS) {
+      expect(createAdjustmentSchema.safeParse({ ...valid, reasonCategory: category }).success).toBe(
+        true,
+      );
+      // A category never substitutes for the free-text detail.
+      expect(
+        createAdjustmentSchema.safeParse({ ...valid, reasonCategory: category, reason: "" })
+          .success,
+      ).toBe(false);
+    }
   });
 });

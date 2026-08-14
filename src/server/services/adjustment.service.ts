@@ -1,11 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { type AdjustmentReasonName } from "@/lib/adjustment-reason";
 import { db } from "@/server/db";
 import { type Actor } from "@/server/services/actor";
 import { recordAuditEvent } from "@/server/services/audit.service";
 
 /**
- * Stock adjustments — signed corrections with a mandatory reason.
+ * Stock adjustments — signed corrections with a mandatory reason, captured as
+ * BOTH a standardised category (for loss-by-cause reporting) and free-text
+ * detail (for the specifics). Neither is optional; the schema enforces both
+ * server-side and the category is descriptive only — no guard, movement, or
+ * balance below reads it.
+ *
  * Authority per CLAUDE.md: SUPERVISOR (own site) or ADMIN; MANAGER is
  * explicitly excluded (router allowlist). Guards keep the ledger sane:
  * a negative adjustment cannot drive stock below zero, a positive one
@@ -56,7 +62,13 @@ async function findAdjustmentReplay(idempotencyKey: string, actorId: string) {
 
 export async function createAdjustment(
   actor: Actor,
-  input: { tankId: string; idempotencyKey: string; quantityChange: number; reason: string },
+  input: {
+    tankId: string;
+    idempotencyKey: string;
+    quantityChange: number;
+    reasonCategory: AdjustmentReasonName;
+    reason: string;
+  },
 ): Promise<CreateAdjustmentResult> {
   const replayBefore = await findAdjustmentReplay(input.idempotencyKey, actor.id);
   if (replayBefore) return replayBefore;
@@ -116,6 +128,7 @@ export async function createAdjustment(
           tankId: tank.id,
           adjustedById: actor.id,
           quantityChange: change,
+          reasonCategory: input.reasonCategory,
           reason: input.reason,
           adjustedAt: new Date(),
         },
@@ -169,6 +182,9 @@ export async function createAdjustment(
     after: {
       tankId: tank.id,
       quantityChange: change.toNumber(),
+      // Both halves of the reason land in the trail: the category makes the
+      // audit itself analysable, the detail keeps it specific.
+      reasonCategory: input.reasonCategory,
       reason: input.reason,
     },
   });
@@ -209,6 +225,7 @@ export async function listAdjustments(
       tankName: row.tank.name,
       adjustedByName: row.adjustedBy.displayName,
       quantityChange: row.quantityChange.toNumber(),
+      reasonCategory: row.reasonCategory,
       reason: row.reason,
       balanceAfterLiters: row.movement?.balanceAfter.toNumber() ?? null,
       adjustedAt: row.adjustedAt,

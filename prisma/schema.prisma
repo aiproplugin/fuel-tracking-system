@@ -57,6 +57,18 @@ enum PermissionMode {
   DENY
 }
 
+// Standardised loss/variance categories for a stock adjustment, recorded
+// ALONGSIDE the free-text detail (never instead of it) so shrinkage can be
+// analysed by cause. Purely descriptive — no stock maths branches on it.
+// Adding a category = one enum value here plus one ADJUSTMENT_REASON_CONFIG
+// entry in src/lib/adjustment-reason.ts (completeness is unit-tested).
+enum AdjustmentReason {
+  UNAUTHORIZED_EXTRACTION // siphoning, off-hours or unrecorded dispensing
+  DISPENSING_INACCURACY // logbook errors, uncalibrated meters, estimates
+  LEAK_OR_SPILL // faulty nozzles, corrosion, hose damage, overfill
+  EVAPORATION_OR_SLUDGE // temperature/condensation loss, tank-bottom sediment
+}
+
 enum MovementType {
   ISSUE
   DELIVERY
@@ -433,15 +445,18 @@ model Delivery {
 }
 
 model StockAdjustment {
-  id             String   @id @default(uuid())
-  idempotencyKey String?  @unique @map("idempotency_key")
-  tankId         String   @map("tank_id")
-  adjustedById   String   @map("adjusted_by_id")
+  id             String           @id @default(uuid())
+  idempotencyKey String?          @unique @map("idempotency_key")
+  tankId         String           @map("tank_id")
+  adjustedById   String           @map("adjusted_by_id")
   // Signed liters: negative = shrinkage/correction down, positive = correction up.
-  quantityChange Decimal  @map("quantity_change") @db.Decimal(12, 2)
+  quantityChange Decimal          @map("quantity_change") @db.Decimal(12, 2)
+  // BOTH are required: the category drives loss-by-cause reporting, the
+  // free-text reason carries the specifics. Neither substitutes for the other.
+  reasonCategory AdjustmentReason @map("reason_category")
   reason         String
-  adjustedAt     DateTime @map("adjusted_at") @db.Timestamptz(3)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  adjustedAt     DateTime         @map("adjusted_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tank       Tank @relation(fields: [tankId], references: [id])
   adjustedBy User @relation(fields: [adjustedById], references: [id])
@@ -449,6 +464,7 @@ model StockAdjustment {
   movement StockMovement?
 
   @@index([tankId, adjustedAt])
+  @@index([reasonCategory, adjustedAt])
   @@map("stock_adjustment")
 }
 

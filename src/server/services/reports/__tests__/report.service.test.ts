@@ -6,6 +6,7 @@ const { mockDb, mockEnv } = vi.hoisted(() => ({
     fuelTransaction: { aggregate: vi.fn(), findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() },
     delivery: { aggregate: vi.fn(), findMany: vi.fn() },
     stockMovement: { count: vi.fn(), findMany: vi.fn() },
+    stockAdjustment: { aggregate: vi.fn(), groupBy: vi.fn(), findMany: vi.fn() },
     tank: { findMany: vi.fn() },
     driver: { findMany: vi.fn() },
     vehicle: { findUnique: vi.fn() },
@@ -158,6 +159,121 @@ describe("runReport — vehicle efficiency (never mixes meter types)", () => {
     expect(result.summary).toContainEqual({ label: "Fleet hrs/L", value: "1.20 hrs/L" });
     expect(result.summary).toContainEqual({ label: "Fleet kWh/L", value: "3.50 kWh/L" });
     expect(result.summary.filter((item) => item.label.startsWith("Fleet"))).toHaveLength(3);
+  });
+});
+
+describe("runReport — adjustment register (loss by reason category)", () => {
+  beforeEach(() => {
+    mockDb.stockAdjustment.aggregate.mockResolvedValue({
+      _sum: { quantityChange: new Prisma.Decimal("-45.00") },
+      _count: { _all: 3 },
+    });
+    mockDb.stockAdjustment.groupBy.mockResolvedValue([
+      {
+        reasonCategory: "LEAK_OR_SPILL",
+        _sum: { quantityChange: new Prisma.Decimal("-25.00") },
+        _count: { _all: 1 },
+      },
+      {
+        reasonCategory: "EVAPORATION_OR_SLUDGE",
+        _sum: { quantityChange: new Prisma.Decimal("-12.00") },
+        _count: { _all: 1 },
+      },
+      {
+        reasonCategory: "UNAUTHORIZED_EXTRACTION",
+        _sum: { quantityChange: new Prisma.Decimal("-8.00") },
+        _count: { _all: 1 },
+      },
+    ]);
+    mockDb.stockAdjustment.findMany.mockResolvedValue([
+      {
+        adjustedAt: new Date("2026-07-02T04:30:00.000Z"),
+        createdAt: new Date("2026-07-02T04:30:00.000Z"),
+        quantityChange: new Prisma.Decimal("-25.00"),
+        reasonCategory: "LEAK_OR_SPILL",
+        reason: "Nozzle drip found at the July dip check.",
+        tank: { name: "Multilac" },
+        adjustedBy: { displayName: "Sunil P." },
+        movement: { balanceAfter: new Prisma.Decimal("1745.00") },
+      },
+    ]);
+  });
+
+  it("exports the category and the detail as separate columns", async () => {
+    const result = await runReport(admin, "adjustment-register", {}, { rowLimit: 500 });
+
+    expect(result.columns.map((column) => column.key)).toEqual([
+      "adjustedAt",
+      "tank",
+      "change",
+      "reasonCategory",
+      "detail",
+      "adjustedBy",
+      "balanceAfter",
+    ]);
+    expect(result.rows[0]).toMatchObject({
+      reasonCategory: "Leak or Spill",
+      detail: "Nozzle drip found at the July dip check.",
+      change: -25,
+    });
+  });
+
+  it("totals litres per category from the whole filtered set, listing every category", async () => {
+    const result = await runReport(admin, "adjustment-register", {}, { rowLimit: 500 });
+
+    expect(result.summary).toContainEqual({ label: "Leak or Spill", value: "-25 L (1)" });
+    expect(result.summary).toContainEqual({ label: "Evaporation or Sludge", value: "-12 L (1)" });
+    expect(result.summary).toContainEqual({
+      label: "Unauthorized Extraction (Suspected Theft)",
+      value: "-8 L (1)",
+    });
+    // Categories with no rows this period still appear, so exports keep shape.
+    expect(result.summary).toContainEqual({ label: "Dispensing Inaccuracy", value: "0 L (0)" });
+    expect(result.summary).toContainEqual({ label: "Net change", value: "-45 L" });
+    // Totals come from the aggregate, never from the (capped) page of rows.
+    expect(result.totalRows).toBe(3);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("pins a supervisor to their own site", async () => {
+    await runReport(supervisor, "adjustment-register", { siteId: "site-b" }, { rowLimit: 500 });
+    expect(mockDb.stockAdjustment.aggregate.mock.calls[0]![0].where.tank).toMatchObject({
+      siteId: "site-a",
+    });
+  });
+});
+
+describe("runReport — tank ledger carries the adjustment category", () => {
+  it("fills the category only for adjustment movements", async () => {
+    mockDb.stockMovement.count.mockResolvedValue(2);
+    mockDb.stockMovement.findMany.mockResolvedValue([
+      {
+        createdAt: new Date("2026-07-02T04:30:00.000Z"),
+        type: "ADJUSTMENT",
+        quantity: new Prisma.Decimal("-25.00"),
+        balanceAfter: new Prisma.Decimal("1745.00"),
+        tank: { name: "Multilac" },
+        fuelTransaction: null,
+        delivery: null,
+        adjustment: { reason: "Nozzle drip", reasonCategory: "LEAK_OR_SPILL" },
+      },
+      {
+        createdAt: new Date("2026-07-02T03:00:00.000Z"),
+        type: "DELIVERY",
+        quantity: new Prisma.Decimal("2000.00"),
+        balanceAfter: new Prisma.Decimal("1770.00"),
+        tank: { name: "Multilac" },
+        fuelTransaction: null,
+        delivery: { supplierName: "Lanka IOC", referenceNo: "INV-88" },
+        adjustment: null,
+      },
+    ]);
+
+    const result = await runReport(admin, "tank-ledger", {}, { rowLimit: 500 });
+
+    expect(result.columns.map((column) => column.key)).toContain("reasonCategory");
+    expect(result.rows[0]).toMatchObject({ type: "ADJUSTMENT", reasonCategory: "Leak or Spill" });
+    expect(result.rows[1]).toMatchObject({ type: "DELIVERY", reasonCategory: "" });
   });
 });
 

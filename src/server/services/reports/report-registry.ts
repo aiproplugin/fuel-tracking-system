@@ -66,6 +66,15 @@ export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
     timeFiltered: true,
     filters: { site: true, vehicle: false, tank: true },
   },
+  "adjustment-register": {
+    key: "adjustment-register",
+    title: "Adjustment register",
+    description: "Stock adjustments by reason category, with litres of variance per category.",
+    xlsx: true,
+    requiresFlag: false,
+    timeFiltered: true,
+    filters: { site: true, vehicle: false, tank: true },
+  },
   "abnormal-consumption": {
     key: "abnormal-consumption",
     title: "Abnormal consumption",

@@ -1,5 +1,6 @@
 import { Prisma, type MeterType } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { ADJUSTMENT_REASONS, adjustmentReasonLabel } from "@/lib/adjustment-reason";
 import { env } from "@/lib/env";
 import { formatLiters, startOfColomboDay } from "@/lib/format";
 import { type FuelTypeName } from "@/lib/fuel";
@@ -234,7 +235,7 @@ async function runTankLedger(
         tank: { select: { name: true } },
         fuelTransaction: { select: { vehicle: { select: { plateNumber: true } } } },
         delivery: { select: { supplierName: true, referenceNo: true } },
-        adjustment: { select: { reason: true } },
+        adjustment: { select: { reason: true, reasonCategory: true } },
       },
     }),
   ]);
@@ -247,6 +248,8 @@ async function runTankLedger(
       { key: "quantity", label: "Change", type: "liters" },
       { key: "balanceAfter", label: "Balance after", type: "liters" },
       { key: "reference", label: "Reference", type: "text" },
+      // Only ADJUSTMENT rows carry one; blank elsewhere by design.
+      { key: "reasonCategory", label: "Reason category", type: "text" },
     ],
     rows: rows.map((row) => ({
       time: row.createdAt.toISOString(),
@@ -254,6 +257,7 @@ async function runTankLedger(
       type: row.type,
       quantity: dec(row.quantity),
       balanceAfter: dec(row.balanceAfter),
+      reasonCategory: row.adjustment ? adjustmentReasonLabel(row.adjustment.reasonCategory) : "",
       reference:
         row.fuelTransaction?.vehicle.plateNumber ??
         (row.delivery
@@ -314,6 +318,88 @@ async function runDeliveryHistory(
     summary: [
       { label: "Deliveries", value: totalRows.toLocaleString("en-US") },
       { label: "Total liters", value: formatLiters(dec(aggregate._sum.liters)) },
+    ],
+    totalRows,
+    truncated: totalRows > rows.length,
+  };
+}
+
+/**
+ * Adjustment register — every stock correction with its reason category and
+ * detail, plus litres of variance PER CATEGORY so loss can be attributed
+ * (leak vs evaporation vs dispensing error vs suspected theft).
+ *
+ * The per-category totals come from a groupBy over the WHOLE filtered set, not
+ * the returned page, so the summary stays correct even when rows are truncated
+ * by the row limit.
+ */
+async function runAdjustmentRegister(
+  actor: Actor,
+  filters: ReportFilters,
+  options: ReportRunOptions,
+): Promise<RawResult> {
+  const scope = resolveScope(actor, filters);
+  const where: Prisma.StockAdjustmentWhereInput = {
+    ...scope.relWhere,
+    ...(filters.tankId ? { tankId: filters.tankId } : {}),
+    adjustedAt: dateRangeWhere(filters.dateFrom, filters.dateTo),
+  };
+
+  const [aggregate, byCategory, rows] = await Promise.all([
+    db.stockAdjustment.aggregate({ where, _sum: { quantityChange: true }, _count: { _all: true } }),
+    db.stockAdjustment.groupBy({
+      by: ["reasonCategory"],
+      where,
+      _sum: { quantityChange: true },
+      _count: { _all: true },
+    }),
+    db.stockAdjustment.findMany({
+      where,
+      orderBy: [{ adjustedAt: "desc" }, { createdAt: "desc" }],
+      take: options.rowLimit,
+      include: {
+        tank: { select: { name: true } },
+        adjustedBy: { select: { displayName: true } },
+        movement: { select: { balanceAfter: true } },
+      },
+    }),
+  ]);
+
+  const totals = new Map(byCategory.map((group) => [group.reasonCategory, group]));
+  const totalRows = aggregate._count._all;
+
+  return {
+    columns: [
+      { key: "adjustedAt", label: "Adjusted at", type: "datetime" },
+      { key: "tank", label: "Tank", type: "text" },
+      { key: "change", label: "Change", type: "liters" },
+      { key: "reasonCategory", label: "Reason category", type: "text" },
+      { key: "detail", label: "Detail", type: "text" },
+      { key: "adjustedBy", label: "Adjusted by", type: "text" },
+      { key: "balanceAfter", label: "Balance after", type: "liters" },
+    ],
+    rows: rows.map((row) => ({
+      adjustedAt: row.adjustedAt.toISOString(),
+      tank: row.tank.name,
+      change: dec(row.quantityChange),
+      reasonCategory: adjustmentReasonLabel(row.reasonCategory),
+      detail: row.reason,
+      adjustedBy: row.adjustedBy.displayName,
+      balanceAfter: row.movement ? dec(row.movement.balanceAfter) : null,
+    })),
+    summary: [
+      { label: "Adjustments", value: totalRows.toLocaleString("en-US") },
+      { label: "Net change", value: formatLiters(dec(aggregate._sum.quantityChange)) },
+      // Every category is listed, including empty ones, so repeat exports keep
+      // the same shape and a zero reads as "none this period".
+      ...ADJUSTMENT_REASONS.map((category) => {
+        const group = totals.get(category);
+        const count = group?._count._all ?? 0;
+        return {
+          label: adjustmentReasonLabel(category),
+          value: `${formatLiters(dec(group?._sum.quantityChange))} (${count.toLocaleString("en-US")})`,
+        };
+      }),
     ],
     totalRows,
     truncated: totalRows > rows.length,
@@ -716,6 +802,9 @@ export async function runReport(
       break;
     case "delivery-history":
       raw = await runDeliveryHistory(actor, effectiveFilters, options);
+      break;
+    case "adjustment-register":
+      raw = await runAdjustmentRegister(actor, effectiveFilters, options);
       break;
     case "abnormal-consumption":
       raw = await runAbnormal(actor, effectiveFilters, options);

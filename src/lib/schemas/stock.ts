@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ADJUSTMENT_REASONS } from "@/lib/adjustment-reason";
 import { strictObject } from "@/lib/validation";
 import { idSchema } from "@/lib/schemas/master-data";
 
@@ -41,6 +42,15 @@ export const createAdjustmentSchema = strictObject({
     .max(MAX_ADJUSTMENT_LITERS)
     .min(-MAX_ADJUSTMENT_LITERS)
     .refine((value) => value !== 0, { message: "Adjustment cannot be zero" }),
+  /**
+   * BOTH reason fields are mandatory, and the server is the enforcer — the form
+   * only mirrors this. The category makes losses countable by cause; the
+   * free-text detail carries the specifics neither a dropdown nor a report can.
+   */
+  reasonCategory: z.enum(ADJUSTMENT_REASONS, {
+    required_error: "A reason category is required",
+    invalid_type_error: "A reason category is required",
+  }),
   reason: z.string().trim().min(5, "A reason is required (min 5 characters)").max(500),
 });
 
