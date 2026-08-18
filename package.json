@@ -23,7 +23,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "reconcile": "tsx scripts/reconcile.ts"
+    "reconcile": "tsx scripts/reconcile.ts",
+    "prune-sessions": "tsx scripts/prune-sessions.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

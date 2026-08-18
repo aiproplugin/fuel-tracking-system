@@ -1,14 +1,30 @@
+import { randomUUID } from "node:crypto";
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { Role } from "@prisma/client";
 import { env } from "@/lib/env";
+import { SESSION_TOKEN_CEILING_SECONDS } from "@/lib/session-policy";
 import { loginInputSchema } from "@/lib/validation";
 import { clientIpFromHeaders } from "@/server/context/request-context";
 import { loginRateLimiter } from "@/server/security/rate-limit";
 import { recordAuditEvent } from "@/server/services/audit.service";
+import {
+  createUserSession,
+  deleteUserSession,
+  resolveSessionState,
+} from "@/server/services/session-policy.service";
 import { verifyUserCredentials } from "@/server/services/user.service";
 
 const useSecureCookies = env.NEXTAUTH_URL.startsWith("https://");
+
+/**
+ * Session-token cookie name. Exported because the JWT salt is the cookie name,
+ * so anything decoding the token out-of-band (the cookie-policy rewriter) must
+ * use exactly this value.
+ */
+export const SESSION_COOKIE_NAME = useSecureCookies
+  ? "__Secure-authjs.session-token"
+  : "authjs.session-token";
 
 /**
  * JWT claims are `unknown` at the type level (the next-auth/jwt module
@@ -102,10 +118,30 @@ export const authConfig = {
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    /**
+     * THE SESSION-LIFETIME GATE. This callback runs on EVERY session read —
+     * tRPC context, server components, the Auth.js routes — and returning null
+     * makes Auth.js clear the session cookies and hand back a null session
+     * (@auth/core/lib/actions/session.js). There is no request path that reads a
+     * session without passing through here, which is why expiry is decided
+     * ONLY here and never by a client-side timer.
+     *
+     * The session's lifetime is not carried in the token: bare `auth()` calls
+     * (how this codebase reads sessions everywhere) discard response cookies,
+     * so a token claim could never be refreshed on activity. Last activity
+     * lives in `user_session`, keyed by the opaque `sid` minted below.
+     */
+    async jwt({ token, user }) {
       // `user` is only present on sign-in; role and tank binding are fixed
       // for the session's lifetime (reassignment requires a fresh login).
       if (user) {
+        // authorize() always supplies an id; the Auth.js User type marks it
+        // optional. Without one the session cannot be tracked, and an untracked
+        // session is one that never expires — so fail closed instead.
+        if (!user.id) {
+          return null;
+        }
+        const sid = randomUUID();
         token.userId = user.id;
         token.username = user.username;
         token.displayName = user.displayName;
@@ -113,8 +149,19 @@ export const authConfig = {
         token.defaultTankId = user.defaultTankId;
         token.siteId = user.siteId;
         token.mustChangePassword = user.mustChangePassword;
+        token.sid = sid;
+        await createUserSession({ sid, userId: user.id, role: user.role });
+        return token;
       }
-      return token;
+
+      const sid = asString(token.sid);
+      // No sid: a token minted before per-role timeouts existed. Fail closed —
+      // one clean re-login on deploy is the correct cost.
+      if (!sid) {
+        return null;
+      }
+
+      return (await resolveSessionState(sid)) === "ACTIVE" ? token : null;
     },
     session({ session, token }) {
       return {
@@ -137,6 +184,12 @@ export const authConfig = {
     async signOut(message) {
       const token = "token" in message ? message.token : null;
       const userId = asString(token?.userId);
+      // Drop the activity record so the sid can never be reused, even if a copy
+      // of the cookie survives somewhere.
+      const sid = asString(token?.sid);
+      if (sid) {
+        await deleteUserSession(sid);
+      }
       if (userId) {
         await recordAuditEvent({
           actorId: userId,
@@ -149,15 +202,25 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 8 * 60 * 60, // one shift; short-lived by design
-    updateAge: 15 * 60, // rotate the session token every 15 minutes of activity
+    /**
+     * OUTER CEILING ONLY — not the security control. It bounds the JWT's `exp`
+     * and the operator cookie's Expires, and must be generous enough for a pump
+     * tablet to stay signed in across shifts. The real limits are the per-role
+     * IDLE timeout and the 12-hour ABSOLUTE cap on privileged roles, both
+     * enforced in the jwt callback above (see src/lib/session-policy.ts).
+     */
+    maxAge: SESSION_TOKEN_CEILING_SECONDS,
+    updateAge: 24 * 60 * 60, // token rotation is not the expiry mechanism here
   },
   pages: {
     signIn: "/login",
   },
   cookies: {
     sessionToken: {
-      name: useSecureCookies ? "__Secure-authjs.session-token" : "authjs.session-token",
+      name: SESSION_COOKIE_NAME,
+      // Auth.js stamps `expires` onto this cookie at every write and cannot be
+      // told otherwise, so the persistent-vs-browser-session choice is applied
+      // per role in session-cookie-policy.ts, on the way out of the auth route.
       options: {
         httpOnly: true,
         sameSite: "strict",

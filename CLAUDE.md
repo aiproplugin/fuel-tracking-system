@@ -56,6 +56,16 @@ Every fuel-quantity change runs through the service layer inside ONE atomic Pris
   in `src/lib/adjustment-reason.ts` (`ADJUSTMENT_REASON_CONFIG`, `ADJUSTMENT_REASONS`); adding a
   category = one enum value + one config entry. The category is descriptive metadata: no stock
   maths, guard, or movement ever branches on it.
+- **SESSION LIFETIME**: idle timeout is configurable PER ROLE (admin Settings, `session_policy`,
+  bounds 5–120 min for SUPERVISOR/MANAGER/ADMIN, persistent allowed for OPERATOR only). Expiry is
+  decided in ONE place — the Auth.js `jwt` callback, via `resolveSessionState` — never by a
+  client-side timer. Privileged roles additionally get a browser-session cookie (no Expires/
+  Max-Age) and a fixed 12-hour absolute cap. All bounds/defaults/cookie decisions live ONLY in
+  `src/lib/session-policy.ts` (`SESSION_POLICY_CONFIG`); adding a role = one enum value + one
+  config entry + the DB CHECK constraint. **NEVER add background polling (`refetchInterval`,
+  timers, heartbeats) to a Supervisor/Manager/Admin screen** — any request resets the idle clock,
+  so a polling screen left open would refresh its own session forever and the idle timeout would
+  silently stop firing. Operator screens may poll (operators are persistent by design).
 - **IDEMPOTENCY**: every fuel submission carries a client-generated idempotency key; dedupe and
   return the original transaction on retry/double-tap.
 - **QR TOKENS**: opaque random UUID-based string in its own `qr_token` table (never the plate,

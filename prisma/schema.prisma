@@ -157,6 +157,7 @@ enum AuditAction {
   PERMISSION_GRANTED
   PERMISSION_DENIED
   PERMISSION_OVERRIDE_REMOVED
+  SESSION_SETTINGS_UPDATED
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,46 @@ model User {
   permissionOverrides UserPermissionOverride[] @relation("UserOverrides")
   permissionsGranted  UserPermissionOverride[] @relation("OverrideGrantedBy")
 
+  sessions UserSession[]
+
   @@map("app_user")
+}
+
+// Admin-configurable session IDLE timeout, one row per role. An absent row
+// means "use the code default" (src/lib/session-policy.ts), so the table starts
+// empty and needs no seed — deploying this feature changes nobody's access.
+//
+// idleMinutes NULL = persistent (no idle expiry), legal for OPERATOR only. The
+// bounds are enforced by Zod, by the service, and by the CHECK constraint in
+// the migration; all three read the same catalogue.
+model SessionPolicy {
+  role        Role     @id
+  idleMinutes Int?     @map("idle_minutes")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("session_policy")
+}
+
+// One row per SIGN-IN, keyed by the opaque `sid` claim minted into the JWT.
+//
+// Per-session (not per-user) on purpose: a forgotten admin tab must expire on
+// its own idle clock without the same admin's active laptop keeping it alive.
+// It also makes sessions revocable — deleting a row logs that device out on its
+// very next request, because the jwt callback fails CLOSED on an unknown sid.
+model UserSession {
+  id             String   @id
+  userId         String   @map("user_id")
+  // Snapshot of the role at sign-in: the JWT fixes the role for the session's
+  // lifetime, so the timeout applied must be the one for THAT role.
+  role           Role
+  lastActivityAt DateTime @map("last_activity_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastActivityAt])
+  @@map("user_session")
 }
 
 // Per-user deviation from the role's default permission bundle. A user with

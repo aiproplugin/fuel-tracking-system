@@ -132,6 +132,11 @@ const EXPECTED: Record<string, Access> = {
 
   "audit.list": MANAGER_UP("audit.view"),
 
+  // Session timeouts ride on the meta-permission on purpose: it is ADMIN-only
+  // and, by invariant #2, can never be granted by a per-user override.
+  "sessionPolicy.getSettings": ADMIN_ONLY("permission.manage"),
+  "sessionPolicy.updateSettings": ADMIN_ONLY("permission.manage"),
+
   "permissions.listUsers": ADMIN_ONLY("permission.manage"),
   "permissions.userAccess": ADMIN_ONLY("permission.manage"),
   "permissions.setOverride": ADMIN_ONLY("permission.manage"),

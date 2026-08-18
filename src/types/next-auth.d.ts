@@ -38,5 +38,11 @@ declare module "next-auth/jwt" {
     defaultTankId?: string | null;
     siteId?: string | null;
     mustChangePassword?: boolean;
+    /**
+     * Opaque per-sign-in session id, minted in the jwt callback and joined to
+     * the `user_session` row that carries this session's last activity. A token
+     * without one is rejected (it predates per-role session timeouts).
+     */
+    sid?: string;
   }
 }

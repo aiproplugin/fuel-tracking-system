@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/admin/page-header";
 import { QuotaSettingsCard } from "@/components/admin/settings/quota-settings-card";
+import { SessionPolicyCard } from "@/components/admin/settings/session-policy-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -86,6 +87,8 @@ export function SettingsClient() {
       />
 
       <QuotaSettingsCard />
+
+      <SessionPolicyCard />
 
       <TableContainer>
         <Table>
