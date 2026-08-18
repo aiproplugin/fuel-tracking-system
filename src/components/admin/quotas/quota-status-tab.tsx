@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { Role } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,19 +66,29 @@ const STATE_BADGE: Record<
   UNLIMITED: { variant: "outline", label: "No quota" },
 };
 
+/**
+ * Every flag is a RESOLVED PERMISSION supplied by the parent, never a role:
+ * the server gates top-ups on quota.manage, override codes on
+ * quota.override.authorise, and site selection on report.view.all (via
+ * effectiveSiteId). Matching them here keeps a granted permission usable and a
+ * denied one hidden.
+ */
 export interface QuotaStatusTabProps {
-  isAdmin: boolean;
-  role: Role | undefined;
+  canManage: boolean;
+  canAuthoriseOverride: boolean;
+  canFilterSite: boolean;
 }
 
-export function QuotaStatusTab({ isAdmin, role }: QuotaStatusTabProps) {
-  const canFilterSite = role === "MANAGER" || role === "ADMIN";
+export function QuotaStatusTab({
+  canManage,
+  canAuthoriseOverride,
+  canFilterSite,
+}: QuotaStatusTabProps) {
   const [siteId, setSiteId] = useState<string>("all");
 
-  const status = api.quotas.status.useQuery(
-    canFilterSite && siteId !== "all" ? { siteId } : {},
-    { placeholderData: (previous) => previous },
-  );
+  const status = api.quotas.status.useQuery(canFilterSite && siteId !== "all" ? { siteId } : {}, {
+    placeholderData: (previous) => previous,
+  });
   const sites = api.sites.list.useQuery(undefined, { enabled: canFilterSite });
 
   const [codeVehicle, setCodeVehicle] = useState<QuotaVehicleRow | null>(null);
@@ -132,8 +141,8 @@ export function QuotaStatusTab({ isAdmin, role }: QuotaStatusTabProps) {
             <CardContent>
               {company.quotaVehicleCount === 0 ? (
                 <p className="text-sm text-muted">
-                  {company.vehicleCount} vehicle{company.vehicleCount === 1 ? "" : "s"}, none with
-                  a quota.
+                  {company.vehicleCount} vehicle{company.vehicleCount === 1 ? "" : "s"}, none with a
+                  quota.
                 </p>
               ) : (
                 <div className="space-y-1 text-sm">
@@ -143,8 +152,9 @@ export function QuotaStatusTab({ isAdmin, role }: QuotaStatusTabProps) {
                   </p>
                   <p className="text-muted">
                     {formatLiters(company.consumedLiters)} of{" "}
-                    {formatLiters(company.totalQuotaLiters)} · {formatLiters(company.remainingLiters)}{" "}
-                    remaining · {company.quotaVehicleCount} quota vehicle
+                    {formatLiters(company.totalQuotaLiters)} ·{" "}
+                    {formatLiters(company.remainingLiters)} remaining · {company.quotaVehicleCount}{" "}
+                    quota vehicle
                     {company.quotaVehicleCount === 1 ? "" : "s"}
                   </p>
                 </div>
@@ -206,12 +216,12 @@ export function QuotaStatusTab({ isAdmin, role }: QuotaStatusTabProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        {vehicle.status === "QUOTA" ? (
+                        {canAuthoriseOverride && vehicle.status === "QUOTA" ? (
                           <Button variant="ghost" size="sm" onClick={() => setCodeVehicle(vehicle)}>
                             Override code
                           </Button>
                         ) : null}
-                        {isAdmin && vehicle.status === "QUOTA" ? (
+                        {canManage && vehicle.status === "QUOTA" ? (
                           <Button
                             variant="ghost"
                             size="sm"

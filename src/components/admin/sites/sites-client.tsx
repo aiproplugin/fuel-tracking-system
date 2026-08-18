@@ -13,13 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 export function SitesClient() {
   const utils = api.useUtils();
   const sites = api.sites.list.useQuery();
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  const { can } = usePermissions();
+  const canManage = can("masterdata.manage");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SiteRow | null>(null);
@@ -42,7 +43,7 @@ export function SitesClient() {
         title="Sites"
         description="Sites group tanks and users. Create a site before adding its tanks and operators."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button
               onClick={() => {
                 setEditing(null);
@@ -58,7 +59,7 @@ export function SitesClient() {
       <SiteTable
         sites={sites.data ?? []}
         isLoading={sites.isLoading}
-        canEdit={isAdmin}
+        canEdit={canManage}
         onEdit={(site) => {
           setEditing(site);
           setDialogOpen(true);

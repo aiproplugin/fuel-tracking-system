@@ -268,6 +268,55 @@ describe("per-user overrides change real access at the router", () => {
     expect(await callCode(caller, "tanks.list")).not.toBe("FORBIDDEN");
   });
 
+  // The UI now gates master-data controls on masterdata.manage rather than the
+  // ADMIN role. These two prove the server half of that contract: the grant a
+  // control now reveals is genuinely honoured, and the denial it now hides is
+  // genuinely refused — so UI visibility and server enforcement agree.
+  it("a GRANT lets a SUPERVISOR reach every master-data mutation", async () => {
+    withOverrides([{ permission: "masterdata.manage", mode: "GRANT" }]);
+    const caller = createCaller(contextFor("SUPERVISOR"));
+    for (const path of [
+      "vehicles.create",
+      "vehicles.update",
+      "sites.create",
+      "sites.delete",
+      "companies.create",
+      "tanks.create",
+      "vehicleTypes.upsert",
+      "vehicleTypes.delete",
+    ]) {
+      expect(await callCode(caller, path), path).not.toBe("FORBIDDEN");
+    }
+  });
+
+  it("without the grant a SUPERVISOR is refused the same mutations", async () => {
+    withOverrides([]);
+    const caller = createCaller(contextFor("SUPERVISOR"));
+    for (const path of ["vehicles.create", "sites.delete", "vehicleTypes.delete"]) {
+      expect(await callCode(caller, path), path).toBe("FORBIDDEN");
+    }
+  });
+
+  it("a DENY strips master-data access from an ADMIN (the reverse case)", async () => {
+    withOverrides([{ permission: "masterdata.manage", mode: "DENY" }]);
+    const caller = createCaller(contextFor("ADMIN"));
+    for (const path of ["vehicles.create", "sites.delete", "vehicleTypes.delete"]) {
+      expect(await callCode(caller, path), path).toBe("FORBIDDEN");
+    }
+  });
+
+  it("a DENY of quota.manage hides top-ups from an ADMIN server-side too", async () => {
+    withOverrides([{ permission: "quota.manage", mode: "DENY" }]);
+    const caller = createCaller(contextFor("ADMIN"));
+    expect(await callCode(caller, "quotas.grantTopUp")).toBe("FORBIDDEN");
+  });
+
+  it("a GRANT of exception.review lets a MANAGER review meter exceptions", async () => {
+    withOverrides([{ permission: "exception.review", mode: "GRANT" }]);
+    const caller = createCaller(contextFor("MANAGER"));
+    expect(await callCode(caller, "fuelIssues.reviewException")).not.toBe("FORBIDDEN");
+  });
+
   it("a DENY of a meta-permission locks an ADMIN out of access management", async () => {
     withOverrides([{ permission: "permission.manage", mode: "DENY" }]);
     const caller = createCaller(contextFor("ADMIN"));

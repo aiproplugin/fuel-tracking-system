@@ -2,11 +2,13 @@ import type { Role } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { type FuelTypeName } from "@/lib/fuel";
 import { logger } from "@/lib/logger";
+import type { Permission } from "@/lib/permissions";
 import { computeLockedUntil, isLocked } from "@/server/auth/lockout-policy";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { db } from "@/server/db";
 import { createRateLimiter } from "@/server/security/rate-limit";
 import { recordAuditEvent } from "@/server/services/audit.service";
+import { resolveActorPermissions } from "@/server/services/permission.service";
 
 /** Shape returned to Auth.js on successful authentication. */
 export interface AuthenticatedUser {
@@ -26,6 +28,17 @@ export interface UserHomeContext {
   username: string;
   displayName: string;
   role: Role;
+  /**
+   * The user's RESOLVED effective permissions — role bundle plus grants, minus
+   * denials. This is what the UI must gate controls on: `role` alone is wrong
+   * the moment a per-user override exists, in both directions (a granted
+   * permission would never light up its control, a denied one would keep it).
+   *
+   * Resolved by the SAME resolveActorPermissions the permissionProcedure gate
+   * uses, so the client and the server can never disagree about what is held.
+   * UI visibility only — the server re-resolves and enforces on every call.
+   */
+  permissions: Permission[];
   siteName: string | null;
   defaultTank: {
     id: string;
@@ -228,11 +241,15 @@ export async function getUserHomeContext(userId: string): Promise<UserHomeContex
     },
   });
 
+  // One source of truth with permissionProcedure: same resolver, same rows.
+  const permissions = await resolveActorPermissions(db, user.id, user.role);
+
   return {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+    permissions: [...permissions],
     siteName: user.site?.name ?? null,
     defaultTank: user.defaultTank
       ? {

@@ -5,13 +5,14 @@ import { PageHeader } from "@/components/admin/page-header";
 import { TankFormDialog } from "@/components/admin/tanks/tank-form-dialog";
 import { TankTable, type TankRow } from "@/components/admin/tanks/tank-table";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 export function TanksClient() {
   const utils = api.useUtils();
   const tanks = api.tanks.list.useQuery();
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  const { can } = usePermissions();
+  const canManage = can("masterdata.manage");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TankRow | null>(null);
@@ -23,7 +24,7 @@ export function TanksClient() {
         title="Tanks"
         description="Stock figures are cached from the append-only ledger. New tanks start empty — fuel arrives through deliveries."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button
               onClick={() => {
                 setEditing(null);
@@ -39,7 +40,7 @@ export function TanksClient() {
       <TankTable
         tanks={tanks.data ?? []}
         isLoading={tanks.isLoading}
-        canEdit={isAdmin}
+        canEdit={canManage}
         onEdit={(tank) => {
           setEditing(tank);
           setDialogOpen(true);

@@ -2,10 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/admin/page-header";
-import {
-  ReportFilters,
-  type ReportFilterState,
-} from "@/components/admin/reports/report-filters";
+import { ReportFilters, type ReportFilterState } from "@/components/admin/reports/report-filters";
 import { ExportButtons } from "@/components/admin/reports/export-buttons";
 import { ReportTable } from "@/components/admin/reports/report-table";
 import {
@@ -15,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 import type { ReportKey } from "@/lib/schemas/reports";
 import type { ReportRow } from "@/server/services/reports/report-types";
@@ -34,8 +32,10 @@ const EMPTY_FILTERS: ReportFilterState = {
  * chooses filters and renders what the service returns.
  */
 export function ReportsClient() {
-  const me = api.auth.me.useQuery();
-  const canSeeSiteFilter = me.data?.role === "MANAGER" || me.data?.role === "ADMIN";
+  const { can } = usePermissions();
+  // Mirrors effectiveSiteId(): only report.view.all may choose a site. An
+  // actor pinned to their own site is pinned server-side regardless.
+  const canSeeSiteFilter = can("report.view.all");
 
   const available = api.reports.available.useQuery();
   const sites = api.sites.list.useQuery(undefined, { enabled: canSeeSiteFilter });
@@ -132,7 +132,10 @@ export function ReportsClient() {
           {data.summary.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {data.summary.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-border bg-card px-5 py-3">
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-border bg-card px-5 py-3"
+                >
                   <p className="text-xs text-muted">{item.label}</p>
                   <p className="mt-1 text-xl font-extrabold">{item.value}</p>
                 </div>

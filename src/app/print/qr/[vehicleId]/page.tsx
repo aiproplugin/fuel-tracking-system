@@ -9,18 +9,28 @@ import { FUEL_CONFIG, fuelLabel } from "@/lib/fuel";
 import { createCaller } from "@/server/api/root";
 import { createTRPCContext } from "@/server/api/trpc";
 import { auth } from "@/server/auth";
+import { db } from "@/server/db";
+import { buildActor } from "@/server/services/permission.service";
 
 export const metadata: Metadata = { title: "Print QR token" };
 
 /**
  * Printable QR sheet — deliberately OUTSIDE the admin shell so the print
- * output is chrome-free. ADMIN-only, same as every qrTokens procedure
- * (the tRPC gate is authoritative; this guard is UX).
+ * output is chrome-free. Gated on qrtoken.manage, the same permission every
+ * qrTokens procedure requires, so a granted permission genuinely opens this
+ * page (the tRPC gate below is authoritative; this guard is UX).
  */
 export default async function PrintQrPage({ params }: { params: { vehicleId: string } }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/home");
+
+  const actor = await buildActor(db, {
+    id: session.user.id,
+    role: session.user.role,
+    siteId: session.user.siteId ?? null,
+    defaultTankId: session.user.defaultTankId ?? null,
+  });
+  if (!actor.permissions.has("qrtoken.manage")) redirect("/home");
 
   const caller = createCaller(
     await createTRPCContext({ headers: new Headers(Array.from(headers().entries())) }),

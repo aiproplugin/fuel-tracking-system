@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime, formatLiters } from "@/lib/format";
 import { formatEfficiency, formatMeter } from "@/lib/meter";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 /**
@@ -28,8 +29,8 @@ import { api } from "@/lib/trpc/client";
  */
 export function FuelIssuesClient() {
   const utils = api.useUtils();
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  const { can } = usePermissions();
+  const canReview = can("exception.review");
 
   const exceptions = api.fuelIssues.exceptions.useQuery();
   const issues = api.fuelIssues.list.useInfiniteQuery(
@@ -77,7 +78,7 @@ export function FuelIssuesClient() {
                     {exception.operatorName} · {formatDateTime(exception.createdAt)}
                   </p>
                 </div>
-                {isAdmin ? (
+                {canReview ? (
                   <Button variant="dark" size="sm" onClick={() => setReviewing(exception)}>
                     Review
                   </Button>

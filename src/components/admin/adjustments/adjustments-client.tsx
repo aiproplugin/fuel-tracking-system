@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ADJUSTMENT_REASON_CONFIG } from "@/lib/adjustment-reason";
 import { formatDateTime, formatLiters } from "@/lib/format";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 /**
@@ -24,8 +25,8 @@ import { api } from "@/lib/trpc/client";
  */
 export function AdjustmentsClient() {
   const utils = api.useUtils();
-  const me = api.auth.me.useQuery();
-  const canRecord = me.data?.role === "ADMIN" || me.data?.role === "SUPERVISOR";
+  const { can } = usePermissions();
+  const canRecord = can("stock.adjust");
 
   const adjustments = api.adjustments.list.useInfiniteQuery(
     { limit: 20 },

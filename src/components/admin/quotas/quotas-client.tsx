@@ -4,19 +4,23 @@ import { useState } from "react";
 import { PageHeader } from "@/components/admin/page-header";
 import { QuotaManageTab } from "@/components/admin/quotas/quota-manage-tab";
 import { QuotaStatusTab } from "@/components/admin/quotas/quota-status-tab";
-import { api } from "@/lib/trpc/client";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
 
 /**
- * Quotas — Status (SUPERVISOR+): live per-vehicle and per-company quota
- * position; Manage (ADMIN): company/type defaults, per-vehicle settings and
- * bulk assignment. Tab visibility mirrors the server-side gates.
+ * Quotas — Status (quota.view): live per-vehicle and per-company quota
+ * position; Manage (quota.manage): company/type defaults, per-vehicle settings
+ * and bulk assignment. Tab visibility mirrors the server-side permission gates.
  */
 export function QuotasClient() {
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  // Tab and control visibility mirror the server-side PERMISSION gates, not
+  // roles: quota.manage unlocks configuration, quota.override.authorise unlocks
+  // issuing an override code, and report.view.all unlocks the site filter
+  // (matching effectiveSiteId). Each is independently enforced server-side.
+  const { can } = usePermissions();
+  const canManage = can("quota.manage");
   const [tab, setTab] = useState<"status" | "manage">("status");
-  const activeTab = tab === "manage" && !isAdmin ? "status" : tab;
+  const activeTab = tab === "manage" && !canManage ? "status" : tab;
 
   return (
     <div className="space-y-6">
@@ -26,7 +30,7 @@ export function QuotasClient() {
         description="Per-vehicle fuel limits resolved most-specific-wins: individual → company → vehicle type → global default. Consumption is measured from the ledger inside each vehicle's own period window."
       />
 
-      {isAdmin ? (
+      {canManage ? (
         <div className="flex gap-2" role="tablist" aria-label="Quota views">
           {(
             [
@@ -53,10 +57,14 @@ export function QuotasClient() {
         </div>
       ) : null}
 
-      {activeTab === "manage" && isAdmin ? (
+      {activeTab === "manage" && canManage ? (
         <QuotaManageTab />
       ) : (
-        <QuotaStatusTab isAdmin={isAdmin} role={me.data?.role} />
+        <QuotaStatusTab
+          canManage={canManage}
+          canAuthoriseOverride={can("quota.override.authorise")}
+          canFilterSite={can("report.view.all")}
+        />
       )}
     </div>
   );

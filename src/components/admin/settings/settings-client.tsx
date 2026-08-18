@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { METER_CONFIG, METER_TYPES, type MeterTypeName } from "@/lib/meter";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 interface EditState {
@@ -59,10 +60,11 @@ interface DeleteTarget {
 export function SettingsClient() {
   const utils = api.useUtils();
   const types = api.vehicleTypes.list.useQuery();
-  // Master-data writes are ADMIN-only. Hiding the controls is UX ONLY — every
-  // mutation below re-resolves masterdata.manage on the server regardless.
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  // Gate on the permission the mutations actually require, not on the role:
+  // a granted masterdata.manage must reveal these controls, a denied one must
+  // hide them. UX ONLY — the server re-resolves and enforces on every call.
+  const { can } = usePermissions();
+  const canManage = can("masterdata.manage");
 
   const [editing, setEditing] = useState<EditState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -109,7 +111,7 @@ export function SettingsClient() {
         title="Settings"
         description="Meter type and expected efficiency band per vehicle type (km/L, hrs/L, or kWh/L). Fuel issues outside their band are flagged as abnormal consumption."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button
               onClick={() => setEditing({ name: "", meterType: "DISTANCE", min: "", max: "" })}
             >
@@ -131,13 +133,13 @@ export function SettingsClient() {
               <TableHead>Meter</TableHead>
               <TableHead>Expected band</TableHead>
               <TableHead>Vehicles</TableHead>
-              {isAdmin ? <TableHead /> : null}
+              {canManage ? <TableHead /> : null}
             </tr>
           </TableHeader>
           <TableBody>
             {types.isLoading ? (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 5 : 4} className="py-8 text-center text-muted">
+                <TableCell colSpan={canManage ? 5 : 4} className="py-8 text-center text-muted">
                   Loading vehicle types…
                 </TableCell>
               </TableRow>
@@ -153,7 +155,7 @@ export function SettingsClient() {
                     {METER_CONFIG[type.meterType].efficiencyUnit}
                   </TableCell>
                   <TableCell className="text-muted">{type.vehicleCount}</TableCell>
-                  {isAdmin ? (
+                  {canManage ? (
                     <TableCell>
                       <span className="flex justify-end gap-1">
                         <Button

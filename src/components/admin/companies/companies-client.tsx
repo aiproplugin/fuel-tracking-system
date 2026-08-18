@@ -13,13 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { api } from "@/lib/trpc/client";
 
 export function CompaniesClient() {
   const utils = api.useUtils();
   const companies = api.companies.list.useQuery();
-  const me = api.auth.me.useQuery();
-  const isAdmin = me.data?.role === "ADMIN";
+  const { can } = usePermissions();
+  const canManage = can("masterdata.manage");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CompanyRow | null>(null);
@@ -42,7 +43,7 @@ export function CompaniesClient() {
         title="Companies"
         description="Group companies that own sites and vehicles. Every site and vehicle must belong to a company, so create the company first."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button
               onClick={() => {
                 setEditing(null);
@@ -58,7 +59,7 @@ export function CompaniesClient() {
       <CompanyTable
         companies={companies.data ?? []}
         isLoading={companies.isLoading}
-        canEdit={isAdmin}
+        canEdit={canManage}
         onEdit={(company) => {
           setEditing(company);
           setDialogOpen(true);
