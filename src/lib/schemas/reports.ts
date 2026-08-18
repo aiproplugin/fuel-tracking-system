@@ -18,6 +18,7 @@ export const REPORT_KEYS = [
   "abnormal-consumption",
   "low-stock",
   "driver-usage",
+  "audit-trail",
 ] as const;
 
 export type ReportKey = (typeof REPORT_KEYS)[number];
@@ -40,10 +41,10 @@ export const reportFilterSchema = strictObject({
   siteId: idSchema.optional(),
   vehicleId: idSchema.optional(),
   tankId: idSchema.optional(),
-}).refine(
-  (value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo,
-  { message: "dateFrom must be on or before dateTo", path: ["dateTo"] },
-);
+}).refine((value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo, {
+  message: "dateFrom must be on or before dateTo",
+  path: ["dateTo"],
+});
 
 export type ReportFilter = z.infer<typeof reportFilterSchema>;
 

@@ -10,6 +10,15 @@ const { mockDb, mockEnv } = vi.hoisted(() => ({
     tank: { findMany: vi.fn() },
     driver: { findMany: vi.fn() },
     vehicle: { findUnique: vi.fn() },
+    auditLog: {
+      count: vi.fn(),
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      create: vi.fn(),
+    },
   },
   mockEnv: { FEATURE_DRIVER_REPORTS: false },
 }));
@@ -18,6 +27,7 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 vi.mock("@/lib/env", () => ({ env: mockEnv }));
 
 import { runReport } from "@/server/services/reports/report.service";
+import { availableReports } from "@/server/services/reports/report-registry";
 import type { Actor } from "@/server/services/actor";
 import { testActor } from "@/server/services/__tests__/test-actor";
 
@@ -35,6 +45,8 @@ beforeEach(() => {
   mockDb.fuelTransaction.count.mockResolvedValue(0);
   mockDb.fuelTransaction.groupBy.mockResolvedValue([]);
   mockDb.driver.findMany.mockResolvedValue([]);
+  mockDb.auditLog.count.mockResolvedValue(0);
+  mockDb.auditLog.findMany.mockResolvedValue([]);
 });
 
 describe("runReport — scoping (never trust the client)", () => {
@@ -289,5 +301,173 @@ describe("runReport — driver-report feature gate", () => {
     const result = await runReport(admin, "driver-usage", {}, { rowLimit: 500 });
     expect(result.key).toBe("driver-usage");
     expect(result.columns.map((column) => column.key)).toContain("driver");
+  });
+});
+
+describe("audit-trail report — access control", () => {
+  // THE privilege-escalation guard. SUPERVISOR holds report.run AND
+  // report.export by default but deliberately NOT audit.view, so the reporting
+  // capability must not become a back door onto the compliance record.
+  it("refuses a SUPERVISOR, who has report.export but not audit.view", async () => {
+    await expect(runReport(supervisor, "audit-trail", {}, { rowLimit: 500 })).rejects.toMatchObject(
+      { code: "FORBIDDEN" },
+    );
+    expect(mockDb.auditLog.findMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses anyone whose audit.view has been denied by override", async () => {
+    const strippedAdmin = testActor("ADMIN", {
+      permissions: ["report.run", "report.export", "report.view.all"],
+    });
+
+    await expect(
+      runReport(strippedAdmin, "audit-trail", {}, { rowLimit: 500 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(mockDb.auditLog.findMany).not.toHaveBeenCalled();
+  });
+
+  it("allows an ADMIN, who holds audit.view", async () => {
+    await expect(runReport(admin, "audit-trail", {}, { rowLimit: 500 })).resolves.toMatchObject({
+      key: "audit-trail",
+    });
+  });
+
+  it("allows a MANAGER, who holds audit.view", async () => {
+    const manager = testActor("MANAGER", { id: "mgr-1" });
+    await expect(runReport(manager, "audit-trail", {}, { rowLimit: 500 })).resolves.toMatchObject({
+      key: "audit-trail",
+    });
+  });
+});
+
+describe("audit-trail report — read-only", () => {
+  it("NEVER issues a write of any kind", async () => {
+    mockDb.auditLog.count.mockResolvedValue(2);
+    mockDb.auditLog.findMany.mockResolvedValue([
+      {
+        id: 2n,
+        action: "LOGIN_SUCCESS",
+        entityType: "user",
+        entityId: "user-1",
+        before: null,
+        after: { ok: true },
+        ipAddress: "10.0.0.5",
+        createdAt: new Date("2026-08-18T06:00:00Z"),
+        actor: { username: "admin", displayName: "Admin User" },
+      },
+    ]);
+
+    await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+
+    // Exporting the trail must not mutate it. Removal happens solely as the
+    // verified tail of an archive run, never through a request path.
+    expect(mockDb.auditLog.delete).not.toHaveBeenCalled();
+    expect(mockDb.auditLog.deleteMany).not.toHaveBeenCalled();
+    expect(mockDb.auditLog.update).not.toHaveBeenCalled();
+    expect(mockDb.auditLog.updateMany).not.toHaveBeenCalled();
+    expect(mockDb.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("audit-trail report — filtering and rendering", () => {
+  it("filters by the inclusive Colombo date range", async () => {
+    await runReport(
+      admin,
+      "audit-trail",
+      { dateFrom: "2026-08-01", dateTo: "2026-08-31" },
+      { rowLimit: 500 },
+    );
+
+    const where = mockDb.auditLog.findMany.mock.calls[0]![0].where as {
+      createdAt: { gte: Date; lt: Date };
+    };
+    expect(where.createdAt.gte.toISOString()).toBe("2026-07-31T18:30:00.000Z");
+    expect(where.createdAt.lt.toISOString()).toBe("2026-08-31T18:30:00.000Z");
+  });
+
+  it("applies no date constraint when no range is given", async () => {
+    await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+    expect(mockDb.auditLog.findMany.mock.calls[0]![0].where).toEqual({});
+  });
+
+  it("serializes before/after JSON without losing the document", async () => {
+    mockDb.auditLog.count.mockResolvedValue(1);
+    mockDb.auditLog.findMany.mockResolvedValue([
+      {
+        id: 1n,
+        action: "SITE_UPDATED",
+        entityType: "site",
+        entityId: "site-1",
+        before: { name: "Old", nested: { deep: [1, 2] } },
+        after: { name: "New", nested: { deep: [3] } },
+        ipAddress: "10.0.0.9",
+        createdAt: new Date("2026-08-18T06:00:00Z"),
+        actor: { username: "admin", displayName: "Admin User" },
+      },
+    ]);
+
+    const result = await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+
+    expect(JSON.parse(String(result.rows[0]!.before))).toEqual({
+      name: "Old",
+      nested: { deep: [1, 2] },
+    });
+    expect(result.rows[0]!.actor).toBe("Admin User (admin)");
+  });
+
+  it("keeps an anonymous event (no actor) in the record", async () => {
+    mockDb.auditLog.count.mockResolvedValue(1);
+    mockDb.auditLog.findMany.mockResolvedValue([
+      {
+        id: 1n,
+        action: "LOGIN_FAILURE",
+        entityType: "user",
+        entityId: null,
+        before: null,
+        after: null,
+        ipAddress: "10.0.0.3",
+        createdAt: new Date("2026-08-18T06:00:00Z"),
+        actor: null,
+      },
+    ]);
+
+    const result = await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.actor).toBe("");
+    expect(result.rows[0]!.before).toBe("");
+  });
+
+  it("reports the true total and flags truncation when row-capped", async () => {
+    mockDb.auditLog.count.mockResolvedValue(5_000);
+    mockDb.auditLog.findMany.mockResolvedValue([]);
+
+    const result = await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+
+    expect(result.totalRows).toBe(5_000);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("is not site-scoped: a site filter never reaches the query", async () => {
+    await runReport(admin, "audit-trail", { siteId: "site-b" }, { rowLimit: 500 });
+
+    expect(mockDb.auditLog.findMany.mock.calls[0]![0].where).toEqual({});
+  });
+
+  it("labels its scope as the whole trail, not 'All sites'", async () => {
+    const result = await runReport(admin, "audit-trail", {}, { rowLimit: 500 });
+    expect(result.meta.scopeNote).toBe("Entire audit trail (not site-scoped)");
+  });
+});
+
+describe("availableReports — listing is permission-filtered", () => {
+  it("hides the audit trail from a supervisor", () => {
+    const keys = availableReports(false, supervisor.permissions).map((d) => d.key);
+    expect(keys).not.toContain("audit-trail");
+  });
+
+  it("offers it to an admin", () => {
+    const keys = availableReports(false, admin.permissions).map((d) => d.key);
+    expect(keys).toContain("audit-trail");
   });
 });

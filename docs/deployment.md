@@ -313,6 +313,55 @@ Wire the task to notify (email/log alert) when the exit code is 1.
 
 ---
 
+## 10a. Audit-trail retention (archive-and-prune)
+
+The audit trail is append-only and grows forever. Rows are **preserved, never
+deleted**: `npm run archive-audit` writes rows older than the retention window
+to a gzipped JSON Lines archive, reads the file back to prove it holds exactly
+those rows, and only then removes those exact ids. Any failure aborts with
+**zero rows removed**.
+
+There is deliberately **no in-app control** that deletes audit rows. Removal
+exists solely as the verified tail of this CLI run.
+
+```bash
+# Linux server (fuel.local) — nightly cron, e.g. 02:30. Working dir = app directory.
+npm run archive-audit                                  # keep 12 months hot (default)
+npm run archive-audit -- --retain-months=24            # keep 24 months hot
+npm run archive-audit -- --archive-dir=/root/backups/audit
+npm run archive-audit -- --actor=admin                 # attribute the event to a user
+npm run archive-audit -- --dry-run                     # report only; writes/deletes nothing
+```
+
+Example crontab entry, alongside the existing version snapshots and DB backups:
+
+```cron
+30 2 * * *  cd /opt/fuel-tracking-system && /usr/bin/npm run archive-audit >> /var/log/fuel-archive-audit.log 2>&1
+```
+
+- **Archive directory** defaults to `./backups/audit` (relative to the app
+  directory). Override per-run with `--archive-dir=` or globally with the
+  `AUDIT_ARCHIVE_DIR` environment variable. Keep it on the same protected volume
+  as the database backups (`/root/backups`), with restricted permissions — the
+  archives contain the full compliance record.
+- **Retention** defaults to 12 months, overridable with `--retain-months=` or
+  `AUDIT_RETENTION_MONTHS`.
+- **Exit code 1** means verification failed and **nothing was deleted**. The
+  trail is intact; investigate the archive path named in the output before
+  retrying. Wire the job to alert on exit code 1.
+- Each run archives up to one batch (5,000 rows). Run it again to continue if a
+  backlog is larger than one batch; the nightly schedule drains it over time.
+- Every completed run records an `AUDIT_ARCHIVED` event — window, row count,
+  archive filename, and SHA-256 — into the *remaining* trail, so the archival is
+  itself accountable. Archives are restored by decompressing the `.jsonl.gz` and
+  reading one JSON document per line.
+
+**On-demand export.** Managers and admins (anyone with `audit.view`) can export
+a date range of the trail to CSV/XLSX from the Audit page or the Reports page.
+That path is strictly read-only and is itself recorded as `AUDIT_EXPORTED`.
+
+---
+
 ## 11. Upgrades / redeploy
 
 ```powershell
@@ -341,6 +390,8 @@ roll back by restoring the pre-upgrade backup and the previous build.
 - [ ] CSV and XLSX exports download and match the on-screen figures.
 - [ ] `npm run reconcile` exits 0.
 - [ ] Nightly backup task and daily reconcile task are scheduled and enabled.
+- [ ] `npm run archive-audit -- --dry-run` exits 0 and names a writable archive
+      directory; the nightly archive job is scheduled and alerts on exit code 1.
 - [ ] PostgreSQL and app ports are not reachable from other hosts.
 - [ ] Audit trail shows the go-live logins.
 

@@ -769,6 +769,76 @@ async function runDriverUsage(
  * matching report, and wraps it with title/scope/range metadata. Used by both
  * the on-screen query and the export handler so all three renderings agree.
  */
+// ---------------------------------------------------------------------------
+// Audit trail (compliance export) — READ ONLY
+// ---------------------------------------------------------------------------
+
+/** JSON column -> compact text cell. Never lossy: the full document is kept. */
+function jsonCell(value: Prisma.JsonValue | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value);
+}
+
+/**
+ * Append-only audit trail over a date range.
+ *
+ * READ-ONLY BY CONSTRUCTION: this issues `count` and `findMany` and nothing
+ * else. Exporting the trail must never mutate it — removal happens solely as
+ * the verified tail of an archive run (audit-archive.service.ts), never here
+ * and never through any request path.
+ *
+ * Deliberately takes no Actor: the trail is not site-scoped. `audit.view` is
+ * all-or-nothing and is enforced by the descriptor's requiredPermission in
+ * runReport, so there is no scoping decision left to make here — and no way for
+ * a report-scope permission to widen or narrow what comes back.
+ */
+async function runAuditTrail(
+  filters: ReportFilters,
+  options: ReportRunOptions,
+): Promise<RawResult> {
+  const range = dateRangeWhere(filters.dateFrom, filters.dateTo);
+  const where: Prisma.AuditLogWhereInput =
+    Object.keys(range).length > 0 ? { createdAt: range } : {};
+
+  const [totalRows, rows] = await Promise.all([
+    db.auditLog.count({ where }),
+    db.auditLog.findMany({
+      where,
+      orderBy: { id: "desc" },
+      take: options.rowLimit,
+      include: { actor: { select: { username: true, displayName: true } } },
+    }),
+  ]);
+
+  return {
+    columns: [
+      { key: "createdAt", label: "Timestamp", type: "datetime" },
+      { key: "action", label: "Action", type: "text" },
+      { key: "actor", label: "Actor", type: "text" },
+      { key: "entityType", label: "Entity type", type: "text" },
+      { key: "entityId", label: "Entity ID", type: "text" },
+      { key: "before", label: "Before", type: "text" },
+      { key: "after", label: "After", type: "text" },
+      { key: "ipAddress", label: "IP address", type: "text" },
+    ],
+    rows: rows.map((row) => ({
+      createdAt: row.createdAt.toISOString(),
+      action: row.action,
+      // Anonymous events (failed login against an unknown username) have no
+      // actor; the row is still part of the record.
+      actor: row.actor ? `${row.actor.displayName} (${row.actor.username})` : "",
+      entityType: row.entityType ?? "",
+      entityId: row.entityId ?? "",
+      before: jsonCell(row.before),
+      after: jsonCell(row.after),
+      ipAddress: row.ipAddress ?? "",
+    })),
+    summary: [{ label: "Events", value: totalRows.toLocaleString("en-US") }],
+    totalRows,
+    truncated: rows.length < totalRows,
+  };
+}
+
 export async function runReport(
   actor: Actor,
   key: ReportKey,
@@ -779,6 +849,17 @@ export async function runReport(
   if (descriptor.requiresFlag && !env.FEATURE_DRIVER_REPORTS) {
     // Feature is hidden: behave as if the report does not exist.
     throw new TRPCError({ code: "NOT_FOUND", message: "Report not found." });
+  }
+
+  // THE dataset gate. report.run/report.export unlock the reporting capability;
+  // a report over privileged data declares the extra permission it needs, and
+  // this is the one place it is enforced — covering the on-screen query and the
+  // export route alike, since both dispatch through here.
+  if (descriptor.requiredPermission && !actor.permissions.has(descriptor.requiredPermission)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You do not have permission to run this report.",
+    });
   }
 
   const scope = resolveScope(actor, filters);
@@ -815,6 +896,9 @@ export async function runReport(
     case "driver-usage":
       raw = await runDriverUsage(actor, effectiveFilters, options);
       break;
+    case "audit-trail":
+      raw = await runAuditTrail(effectiveFilters, options);
+      break;
   }
 
   return {
@@ -823,7 +907,7 @@ export async function runReport(
     meta: {
       title: descriptor.title,
       generatedAt: new Date().toISOString(),
-      scopeNote: scope.note,
+      scopeNote: descriptor.scopeNote ?? scope.note,
       range: {
         from: descriptor.timeFiltered ? (effectiveFilters.dateFrom ?? null) : null,
         to: descriptor.timeFiltered ? (effectiveFilters.dateTo ?? null) : null,

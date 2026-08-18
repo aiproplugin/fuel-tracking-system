@@ -15,8 +15,11 @@ export const ON_SCREEN_ROW_LIMIT = 500;
  * SAME service through the same permission checks.
  */
 export const reportsRouter = createTRPCRouter({
-  available: permissionProcedure("report.run").query(() =>
-    availableReports(env.FEATURE_DRIVER_REPORTS),
+  // Listing is filtered by the actor's effective permissions, so a report over
+  // privileged data (the audit trail) is never advertised to someone who
+  // cannot run it. runReport re-checks on every call — this is UX only.
+  available: permissionProcedure("report.run").query(({ ctx }) =>
+    availableReports(env.FEATURE_DRIVER_REPORTS, ctx.actor.permissions),
   ),
 
   run: permissionProcedure("report.run")

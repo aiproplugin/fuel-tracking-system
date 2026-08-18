@@ -20,7 +20,6 @@ export const dynamic = "force-dynamic";
 /** Export row ceiling — larger than the on-screen cap, still bounded. */
 const EXPORT_ROW_LIMIT = 50_000;
 
-
 /**
  * Binary export endpoint for reports. SECURITY: authenticates via the server
  * session and builds the Actor from it — NEVER from the request — then calls
@@ -88,9 +87,13 @@ export async function GET(request: Request): Promise<Response> {
 
       // Audit AFTER a successful scoped run (before streaming the body). Records
       // WHAT was exported and the requested filters — never any row data/PII.
+      //
+      // The action is registry-driven: exporting the audit trail records
+      // AUDIT_EXPORTED so reads of the compliance record stay greppable on
+      // their own rather than blending into ordinary report traffic.
       await recordAuditEvent({
         actorId: session.user.id,
-        action: "REPORT_EXPORTED",
+        action: descriptor.exportAuditAction ?? "REPORT_EXPORTED",
         entityType: "report",
         entityId: query.reportKey,
         after: {
@@ -115,8 +118,7 @@ export async function GET(request: Request): Promise<Response> {
         return new Response(buffer, {
           status: 200,
           headers: {
-            "Content-Type":
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "Content-Disposition": `attachment; filename="${filename}"`,
             "Cache-Control": "no-store",
           },

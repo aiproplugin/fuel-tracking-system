@@ -24,7 +24,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "reconcile": "tsx scripts/reconcile.ts",
-    "prune-sessions": "tsx scripts/prune-sessions.ts"
+    "prune-sessions": "tsx scripts/prune-sessions.ts",
+    "archive-audit": "tsx scripts/archive-audit.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

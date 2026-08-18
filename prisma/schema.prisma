@@ -159,6 +159,8 @@ enum AuditAction {
   PERMISSION_OVERRIDE_REMOVED
   SESSION_SETTINGS_UPDATED
   VEHICLE_TYPE_DELETED
+  AUDIT_EXPORTED
+  AUDIT_ARCHIVED
 }
 
 // ---------------------------------------------------------------------------

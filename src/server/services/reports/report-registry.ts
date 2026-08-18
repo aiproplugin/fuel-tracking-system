@@ -1,3 +1,5 @@
+import type { AuditAction } from "@prisma/client";
+import type { Permission } from "@/lib/permissions";
 import type { ReportKey } from "@/lib/schemas/reports";
 
 /**
@@ -18,6 +20,29 @@ export interface ReportDescriptor {
   /** Uses the date-range filter (snapshot reports do not). */
   timeFiltered: boolean;
   filters: { site: boolean; vehicle: boolean; tank: boolean };
+  /**
+   * EXTRA permission required on top of report.run / report.export.
+   *
+   * `report.run` and `report.export` unlock the reporting CAPABILITY, not every
+   * dataset reachable through it — SUPERVISOR holds both but deliberately does
+   * NOT hold `audit.view`. Without this gate, adding an audit report to the
+   * catalogue would hand the whole audit trail to every supervisor. Enforced in
+   * runReport, which is the single dispatch point for the on-screen query AND
+   * the export route, so one check covers both.
+   */
+  requiredPermission?: Permission;
+  /**
+   * Fixed scope note, for reports that do not go through site scoping at all.
+   * Without it the generic note ("All sites") would imply a site dimension the
+   * report does not have.
+   */
+  scopeNote?: string;
+  /**
+   * Audit action written when this report is exported. Defaults to
+   * REPORT_EXPORTED; the audit trail uses its own action so "who read the
+   * audit trail" stays greppable rather than buried among ordinary exports.
+   */
+  exportAuditAction?: AuditAction;
 }
 
 export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
@@ -102,11 +127,38 @@ export const REPORT_DESCRIPTORS: Record<ReportKey, ReportDescriptor> = {
     timeFiltered: true,
     filters: { site: true, vehicle: false, tank: false },
   },
+  "audit-trail": {
+    key: "audit-trail",
+    title: "Audit trail",
+    description:
+      "Append-only compliance record for a date range: actor, action, entity, before/after, and IP.",
+    xlsx: true,
+    requiresFlag: false,
+    timeFiltered: true,
+    // The trail is never site-scoped: audit.view is all-or-nothing, so no site
+    // filter is offered and resolveScope is not consulted for this report.
+    filters: { site: false, vehicle: false, tank: false },
+    requiredPermission: "audit.view",
+    exportAuditAction: "AUDIT_EXPORTED",
+    scopeNote: "Entire audit trail (not site-scoped)",
+  },
 };
 
-/** Reports visible to the UI/API given whether driver reports are enabled. */
-export function availableReports(driverReportsEnabled: boolean): ReportDescriptor[] {
+/**
+ * Reports visible to the UI/API for this actor.
+ *
+ * Filters on BOTH the feature flag and the actor's effective permissions, so a
+ * report the caller may not run is never advertised. This is a listing
+ * convenience, not the gate — runReport re-checks `requiredPermission` on every
+ * call and is what actually enforces access.
+ */
+export function availableReports(
+  driverReportsEnabled: boolean,
+  permissions: ReadonlySet<string>,
+): ReportDescriptor[] {
   return Object.values(REPORT_DESCRIPTORS).filter(
-    (descriptor) => !descriptor.requiresFlag || driverReportsEnabled,
+    (descriptor) =>
+      (!descriptor.requiresFlag || driverReportsEnabled) &&
+      (!descriptor.requiredPermission || permissions.has(descriptor.requiredPermission)),
   );
 }
