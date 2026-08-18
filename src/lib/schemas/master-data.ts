@@ -80,6 +80,8 @@ export const upsertVehicleTypeSchema = strictObject({
   path: ["minEfficiency"],
 });
 
+export const deleteVehicleTypeSchema = strictObject({ id: idSchema });
+
 // --- Vehicles -----------------------------------------------------------------
 
 export const createVehicleSchema = strictObject({

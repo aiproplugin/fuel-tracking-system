@@ -21,12 +21,7 @@ vi.mock("@/server/db", () => ({ db: mockDb }));
 vi.mock("@/server/auth", () => ({ auth: vi.fn() }));
 
 import { createRequestLogger } from "@/lib/logger";
-import {
-  PERMISSIONS,
-  ROLE_DEFAULTS,
-  validateOverrides,
-  type Permission,
-} from "@/lib/permissions";
+import { PERMISSIONS, ROLE_DEFAULTS, validateOverrides, type Permission } from "@/lib/permissions";
 import { appRouter, createCaller } from "@/server/api/root";
 import type { TRPCContext } from "@/server/api/trpc";
 
@@ -116,6 +111,7 @@ const EXPECTED: Record<string, Access> = {
 
   "vehicleTypes.list": SUPERVISOR_UP("masterdata.view"),
   "vehicleTypes.upsert": ADMIN_ONLY("masterdata.manage"),
+  "vehicleTypes.delete": ADMIN_ONLY("masterdata.manage"),
 
   "users.list": ADMIN_ONLY("user.manage"),
   "users.create": ADMIN_ONLY("user.manage"),

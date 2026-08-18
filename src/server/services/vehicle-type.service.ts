@@ -119,3 +119,60 @@ export async function upsertVehicleType(
     throw error;
   }
 }
+
+/**
+ * Delete a vehicle type (ADMIN). Delete-when-empty only.
+ *
+ * `Vehicle.vehicleTypeId` is the ONLY reference to a vehicle type anywhere in
+ * the schema, and its FK is ON DELETE RESTRICT — so a zero vehicle count is a
+ * complete safety check, not a partial one. Fuel transactions and meter
+ * exceptions hang off the vehicle, never off the type, so no history is
+ * orphaned by removing a type nothing points at.
+ *
+ * Audited as VEHICLE_TYPE_DELETED on success only: a blocked attempt writes no
+ * audit row, matching deleteSite/deleteCompany.
+ */
+export async function deleteVehicleType(actorId: string, input: { id: string }) {
+  const vehicleType = await db.vehicleType.findUnique({
+    where: { id: input.id },
+    include: { _count: { select: { vehicles: true } } },
+  });
+  if (!vehicleType) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Vehicle type not found." });
+  }
+
+  const vehicleCount = vehicleType._count.vehicles;
+  if (vehicleCount > 0) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: `Cannot delete: ${vehicleCount} vehicle${vehicleCount === 1 ? "" : "s"} use this type. Reassign or remove them first.`,
+    });
+  }
+
+  try {
+    await db.vehicleType.delete({ where: { id: input.id } });
+  } catch (error) {
+    // Safety net: a vehicle created between the count and the delete surfaces
+    // the same friendly message instead of a raw FK (P2003) error.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Cannot delete this vehicle type while vehicles still use it.",
+      });
+    }
+    throw error;
+  }
+
+  await recordAuditEvent({
+    actorId,
+    action: "VEHICLE_TYPE_DELETED",
+    entityType: "vehicle_type",
+    entityId: input.id,
+    before: {
+      name: vehicleType.name,
+      meterType: vehicleType.meterType,
+      minEfficiency: vehicleType.minEfficiency.toNumber(),
+      maxEfficiency: vehicleType.maxEfficiency.toNumber(),
+    },
+  });
+}

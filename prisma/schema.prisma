@@ -158,6 +158,7 @@ enum AuditAction {
   PERMISSION_DENIED
   PERMISSION_OVERRIDE_REMOVED
   SESSION_SETTINGS_UPDATED
+  VEHICLE_TYPE_DELETED
 }
 
 // ---------------------------------------------------------------------------

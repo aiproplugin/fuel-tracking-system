@@ -6,6 +6,14 @@ import { QuotaSettingsCard } from "@/components/admin/settings/quota-settings-ca
 import { SessionPolicyCard } from "@/components/admin/settings/session-policy-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +43,12 @@ interface EditState {
   max: string;
 }
 
+interface DeleteTarget {
+  id: string;
+  name: string;
+  vehicleCount: number;
+}
+
 /**
  * Settings — per-vehicle-type meter type + efficiency bands (the
  * abnormal-consumption bands, in the type's own unit per litre: km/L, hrs/L,
@@ -45,9 +59,16 @@ interface EditState {
 export function SettingsClient() {
   const utils = api.useUtils();
   const types = api.vehicleTypes.list.useQuery();
+  // Master-data writes are ADMIN-only. Hiding the controls is UX ONLY — every
+  // mutation below re-resolves masterdata.manage on the server regardless.
+  const me = api.auth.me.useQuery();
+  const isAdmin = me.data?.role === "ADMIN";
 
   const [editing, setEditing] = useState<EditState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const upsertMutation = api.vehicleTypes.upsert.useMutation({
     onSuccess: () => {
@@ -56,6 +77,14 @@ export function SettingsClient() {
       void utils.vehicleTypes.list.invalidate();
     },
     onError: (error) => setErrorMessage(error.message),
+  });
+
+  const deleteMutation = api.vehicleTypes.delete.useMutation({
+    onSuccess: () => {
+      setDeleting(null);
+      void utils.vehicleTypes.list.invalidate();
+    },
+    onError: (error) => setDeleteError(error.message),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -80,9 +109,13 @@ export function SettingsClient() {
         title="Settings"
         description="Meter type and expected efficiency band per vehicle type (km/L, hrs/L, or kWh/L). Fuel issues outside their band are flagged as abnormal consumption."
         actions={
-          <Button onClick={() => setEditing({ name: "", meterType: "DISTANCE", min: "", max: "" })}>
-            Add vehicle type
-          </Button>
+          isAdmin ? (
+            <Button
+              onClick={() => setEditing({ name: "", meterType: "DISTANCE", min: "", max: "" })}
+            >
+              Add vehicle type
+            </Button>
+          ) : undefined
         }
       />
 
@@ -98,13 +131,13 @@ export function SettingsClient() {
               <TableHead>Meter</TableHead>
               <TableHead>Expected band</TableHead>
               <TableHead>Vehicles</TableHead>
-              <TableHead />
+              {isAdmin ? <TableHead /> : null}
             </tr>
           </TableHeader>
           <TableBody>
             {types.isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted">
+                <TableCell colSpan={isAdmin ? 5 : 4} className="py-8 text-center text-muted">
                   Loading vehicle types…
                 </TableCell>
               </TableRow>
@@ -120,25 +153,48 @@ export function SettingsClient() {
                     {METER_CONFIG[type.meterType].efficiencyUnit}
                   </TableCell>
                   <TableCell className="text-muted">{type.vehicleCount}</TableCell>
-                  <TableCell>
-                    <span className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setEditing({
-                            id: type.id,
-                            name: type.name,
-                            meterType: type.meterType,
-                            min: String(type.minEfficiency),
-                            max: String(type.maxEfficiency),
-                          })
-                        }
-                      >
-                        Edit band
-                      </Button>
-                    </span>
-                  </TableCell>
+                  {isAdmin ? (
+                    <TableCell>
+                      <span className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setEditing({
+                              id: type.id,
+                              name: type.name,
+                              meterType: type.meterType,
+                              min: String(type.minEfficiency),
+                              max: String(type.maxEfficiency),
+                            })
+                          }
+                        >
+                          Edit band
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-danger hover:text-danger"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleting({
+                              id: type.id,
+                              name: type.name,
+                              vehicleCount: type.vehicleCount,
+                            });
+                          }}
+                          disabled={type.vehicleCount > 0}
+                          title={
+                            type.vehicleCount > 0
+                              ? "Reassign or remove every vehicle of this type before deleting it."
+                              : undefined
+                          }
+                        >
+                          Delete
+                        </Button>
+                      </span>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))
             )}
@@ -235,6 +291,53 @@ export function SettingsClient() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.name}?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the vehicle type and its meter type and efficiency band. It
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError ? (
+            <p role="alert" className="text-sm font-medium text-danger">
+              {deleteError}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDeleting(null)}
+              disabled={deleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => {
+                if (deleting) {
+                  setDeleteError(null);
+                  deleteMutation.mutate({ id: deleting.id });
+                }
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete vehicle type"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
